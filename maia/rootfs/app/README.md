@@ -15,7 +15,7 @@ MAIA (My AI Assistant) is an advanced Home Assistant add-on that provides voice 
 
 1. Add the MAIA repository to your Home Assistant add-on store:
    ```
-   https://github.com/kimasplund/maia-ha-addon
+   https://github.com/kimasplund/maia
    ```
 
 2. Install the MAIA add-on from the add-on store
@@ -74,8 +74,8 @@ The add-on can be configured through the Home Assistant UI. Available options in
 ### Setup Development Environment
 1. Clone the repository:
    ```bash
-   git clone https://github.com/kimasplund/maia-ha-addon.git
-   cd maia-ha-addon
+   git clone https://github.com/kimasplund/maia.git
+   cd maia
    ```
 
 2. Create a virtual environment:

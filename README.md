@@ -32,5 +32,5 @@ The add-on can be configured through the Home Assistant UI. Available options in
 ## Support
 
 - [Documentation](https://github.com/kimasplund/maia/wiki)
-- [Issues](https://github.com/kimasplund/maia-ha-addon/issues)
-- [Discussions](https://github.com/kimasplund/maia-ha-addon/discussions) 
+- [Issues](https://github.com/kimasplund/maia/issues)
+- [Discussions](https://github.com/kimasplund/maia/discussions) 

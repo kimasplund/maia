@@ -1,0 +1,73 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// WiFi Configuration
+#define WIFI_SSID "your_wifi_ssid"
+#define WIFI_PASSWORD "your_wifi_password"
+#define WIFI_CONNECT_TIMEOUT 20000  // ms
+
+// Home Assistant Configuration
+#define HA_HOST "192.168.1.100"     // Home Assistant IP address
+#define HA_PORT 8123                // Home Assistant port
+#define HA_WS_PATH "/api/websocket" // WebSocket API path
+#define DEVICE_ID "esp32cam_1"      // Unique device identifier
+
+// Camera Configuration
+#define CAMERA_FRAME_SIZE FRAMESIZE_SVGA  // QVGA, VGA, SVGA, XGA, SXGA, UXGA
+#define CAMERA_JPEG_QUALITY 12            // 0-63 (lower is higher quality)
+#define VIDEO_FRAME_RATE 20               // Frames per second
+#define ENABLE_FACE_DETECTION true        // Enable face detection
+#define ENABLE_MOTION_DETECTION true      // Enable motion detection
+#define MOTION_SENSITIVITY 20             // Motion detection sensitivity (1-100)
+
+// Audio Configuration
+#define AUDIO_SAMPLE_RATE 16000          // Sample rate in Hz
+#define AUDIO_BIT_DEPTH 16               // Bit depth for audio samples
+#define AUDIO_BUFFER_SIZE 512            // Buffer size for audio samples
+#define I2S_WS_PIN 15                    // Word Select/LRCL pin
+#define I2S_SD_PIN 13                    // Serial Data/DOUT pin
+#define I2S_SCK_PIN 14                   // Serial Clock pin
+
+// WebSocket Configuration
+#define WEBSOCKET_RECONNECT_INTERVAL 5000 // Reconnection delay in ms
+#define WEBSOCKET_PING_INTERVAL 30000     // Keep-alive ping interval in ms
+#define WEBSOCKET_TIMEOUT 10000           // WebSocket timeout in ms
+
+// Power Management
+#define ENABLE_DEEP_SLEEP false          // Enable deep sleep mode
+#define DEEP_SLEEP_DURATION 300000       // Sleep duration in ms (5 minutes)
+#define WAKE_UP_PIN GPIO_NUM_13          // Pin to wake from deep sleep
+
+// LED Configuration
+#define STATUS_LED_PIN 33                // Built-in LED pin
+#define FLASH_LED_PIN 4                  // Flash LED pin
+
+// Debug Configuration
+#define DEBUG_ENABLED true               // Enable debug output
+#define SERIAL_BAUD_RATE 115200         // Serial baud rate
+
+// Buffer Sizes
+#define JSON_BUFFER_SIZE 2048           // Size for JSON document
+#define CAMERA_FRAME_BUFFER_SIZE 32768  // Size for camera frame buffer
+#define MAX_WEBSOCKET_MESSAGE_SIZE 4096 // Maximum WebSocket message size
+
+// OTA Update Configuration
+#define ENABLE_OTA_UPDATES true         // Enable OTA updates
+#define OTA_PASSWORD "maia_ota_pass"    // Password for OTA updates
+#define OTA_PORT 3232                   // Port for OTA updates
+
+// Security Configuration
+#define ENABLE_HTTPS true               // Enable HTTPS for secure communication
+#define ENABLE_AUTHENTICATION true      // Enable authentication
+#define AUTH_TOKEN "your_auth_token"    // Authentication token
+
+// Error Handling
+#define MAX_RECONNECT_ATTEMPTS 5        // Maximum reconnection attempts
+#define ERROR_BLINK_INTERVAL 1000       // Error LED blink interval in ms
+
+// Feature Flags
+#define ENABLE_FACE_RECOGNITION true    // Enable face recognition
+#define ENABLE_AUDIO_DETECTION true     // Enable audio detection
+#define ENABLE_STATUS_REPORTING true    // Enable status reporting to HA
+
+#endif // CONFIG_H 

@@ -320,6 +320,78 @@ maia:
 
 ## ESP32 Setup
 
+### Initial ESP32-CAM Flashing
+
+#### Hardware Requirements
+- ESP32-CAM board
+- FTDI USB-to-TTL adapter or similar USB-to-Serial programmer
+- Jumper wires
+- Micro USB cable for power (optional)
+
+#### Wiring for Flashing
+1. Connect ESP32-CAM to FTDI adapter:
+   - ESP32-CAM GND → FTDI GND
+   - ESP32-CAM 5V/VCC → FTDI VCC (3.3V)
+   - ESP32-CAM U0R (TX) → FTDI RX
+   - ESP32-CAM U0T (RX) → FTDI TX
+   - ESP32-CAM IO0 → FTDI GND (only during flashing)
+
+2. Important: GPIO 0 (IO0) must be connected to GND during flashing to enter programming mode
+
+#### Flashing Process
+1. Install ESP32 tools:
+   ```bash
+   pip install esptool
+   ```
+
+2. Download the firmware:
+   ```bash
+   # Clone repository if you haven't already
+   git clone https://github.com/kimasplund/maia.git
+   cd maia/esp32/maia_esp32cam_firmware
+   ```
+
+3. Put ESP32-CAM in flashing mode:
+   - Connect IO0 to GND
+   - Press the RST button or power cycle the board
+
+4. Flash the firmware:
+   ```bash
+   esptool.py --port COM5 --baud 115200 --chip esp32 \
+     --before default_reset --after hard_reset write_flash -z \
+     --flash_mode dio --flash_freq 80m --flash_size detect \
+     0x1000 bootloader.bin \
+     0x8000 partitions.bin \
+     0x10000 maia_esp32cam_firmware.bin
+   ```
+   Note: Replace `COM5` with your actual serial port (e.g., `/dev/ttyUSB0` on Linux)
+
+5. After flashing:
+   - Disconnect IO0 from GND
+   - Press RST button or power cycle
+   - The board will start in normal mode
+
+#### First-time Configuration
+1. On first boot, ESP32-CAM creates a WiFi access point named "MAIA_XXXXX"
+2. Connect to this WiFi network
+3. Open http://192.168.4.1 in your browser
+4. Configure your WiFi credentials and MAIA settings:
+   - Home WiFi SSID and password
+   - Home Assistant IP address
+   - Device name
+   - Camera settings (optional)
+   - Audio settings (optional)
+
+#### Troubleshooting
+- If flashing fails, double-check:
+  - Wiring connections
+  - IO0 is properly grounded during flashing
+  - Correct COM port is selected
+  - USB driver is properly installed
+- If the board doesn't create WiFi access point:
+  - Press and hold RESET for 10 seconds to factory reset
+  - Check power supply (ESP32-CAM needs stable 5V)
+
 1. Flash the ESP32 firmware (available in the `esp32` directory)
 2. Configure the ESP32 with your WiFi credentials
 3. Add the ESP32 device in Home Assistant:

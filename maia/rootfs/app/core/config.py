@@ -138,16 +138,4 @@ class ConfigManager:
                 
         except Exception as e:
             _LOGGER.error("Failed to save configuration: %s", str(e))
-            raise
-
-    def update_tts_config(self, **kwargs) -> None:
-        """Update TTS configuration."""
-        for key, value in kwargs.items():
-            if hasattr(self.tts_config, key):
-                setattr(self.tts_config, key, value)
-
-    def update_voice_config(self, **kwargs) -> None:
-        """Update voice processing configuration."""
-        for key, value in kwargs.items():
-            if hasattr(self.voice_config, key):
-                setattr(self.voice_config, key, value) 
+            raise 

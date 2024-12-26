@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}MAIA - Camera{% endblock %}
+
+{% block extra_css %}
+<style>
+.camera-container {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.camera-feed {
+    width: 100%;
+    height: 0;
+    padding-bottom: 75%; /* 4:3 aspect ratio */
+    position: relative;
+    background-color: #000;
+}
+
+#camera-stream {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#face-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.face-rect {
+    position: absolute;
+    border: 2px solid var(--primary-color);
+    border-radius: 4px;
+}
+
+.face-label {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--primary-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.camera-controls {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.control-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--primary-color);
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.control-button:hover {
+    background-color: #0056b3;
+}
+
+.control-button.active {
+    background-color: var(--success-color);
+}
+
+.control-button i {
+    font-size: 1.2rem;
+}
+
+.detection-stats {
+    margin-top: 2rem;
+    padding: 1rem;
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.stat-label {
+    font-weight: bold;
+    color: var(--secondary-color);
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin-top: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="camera-container">
+        <div class="camera-feed">
+            <video id="camera-stream" autoplay playsinline></video>
+            <div id="face-overlay"></div>
+        </div>
+        <div class="camera-controls">
+            <button id="camera-button" class="control-button">
+                <i class="fas fa-video"></i>
+                <span>Start Camera</span>
+            </button>
+            <button id="snapshot-button" class="control-button">
+                <i class="fas fa-camera"></i>
+                <span>Take Snapshot</span>
+            </button>
+            <button id="detection-button" class="control-button">
+                <i class="fas fa-user-check"></i>
+                <span>Face Detection</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="detection-stats">
+        <h2>Detection Statistics</h2>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-label">Faces Detected</div>
+                <div class="stat-value" id="faces-count">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Known Faces</div>
+                <div class="stat-value" id="known-faces">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Processing Time</div>
+                <div class="stat-value" id="processing-time">0 ms</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">FPS</div>
+                <div class="stat-value" id="fps">0</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let stream = null;
+let isDetectionActive = false;
+let lastFrameTime = performance.now();
+let frameCount = 0;
+
+// Initialize camera stream
+async function initCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        });
+        
+        const videoElement = document.getElementById('camera-stream');
+        videoElement.srcObject = stream;
+        
+        // Update button state
+        const cameraButton = document.getElementById('camera-button');
+        cameraButton.classList.add('active');
+        cameraButton.querySelector('span').textContent = 'Stop Camera';
+        
+    } catch (error) {
+        console.error('Failed to access camera:', error);
+        alert('Failed to access camera. Please ensure camera permissions are granted.');
+    }
+}
+
+// Stop camera stream
+function stopCamera() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+        
+        const videoElement = document.getElementById('camera-stream');
+        videoElement.srcObject = null;
+        
+        // Update button state
+        const cameraButton = document.getElementById('camera-button');
+        cameraButton.classList.remove('active');
+        cameraButton.querySelector('span').textContent = 'Start Camera';
+    }
+}
+
+// Take snapshot
+function takeSnapshot() {
+    if (!stream) return;
+    
+    const videoElement = document.getElementById('camera-stream');
+    const canvas = document.createElement('canvas');
+    canvas.width = videoElement.videoWidth;
+    canvas.height = videoElement.videoHeight;
+    
+    const context = canvas.getContext('2d');
+    context.drawImage(videoElement, 0, 0);
+    
+    // Convert to blob and send to server
+    canvas.toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append('frame', blob);
+        
+        try {
+            const response = await fetch('/camera/process', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            handleCameraMessage(result);
+            
+        } catch (error) {
+            console.error('Failed to process snapshot:', error);
+        }
+    }, 'image/jpeg');
+}
+
+// Toggle face detection
+function toggleDetection() {
+    isDetectionActive = !isDetectionActive;
+    
+    const detectionButton = document.getElementById('detection-button');
+    detectionButton.classList.toggle('active');
+    detectionButton.querySelector('span').textContent = 
+        isDetectionActive ? 'Stop Detection' : 'Face Detection';
+        
+    if (isDetectionActive) {
+        processFrame();
+    }
+}
+
+// Process video frame
+async function processFrame() {
+    if (!isDetectionActive || !stream) return;
+    
+    const videoElement = document.getElementById('camera-stream');
+    const canvas = document.createElement('canvas');
+    canvas.width = videoElement.videoWidth;
+    canvas.height = videoElement.videoHeight;
+    
+    const context = canvas.getContext('2d');
+    context.drawImage(videoElement, 0, 0);
+    
+    // Convert to blob and send to server
+    canvas.toBlob(async (blob) => {
+        const formData = new FormData();
+        formData.append('frame', blob);
+        
+        try {
+            const response = await fetch('/camera/process', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            handleCameraMessage(result);
+            
+            // Update FPS
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFrameTime >= 1000) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+            
+            // Process next frame
+            if (isDetectionActive) {
+                requestAnimationFrame(processFrame);
+            }
+            
+        } catch (error) {
+            console.error('Failed to process frame:', error);
+            if (isDetectionActive) {
+                requestAnimationFrame(processFrame);
+            }
+        }
+    }, 'image/jpeg');
+}
+
+// Event listeners
+document.getElementById('camera-button').addEventListener('click', () => {
+    if (stream) {
+        stopCamera();
+    } else {
+        initCamera();
+    }
+});
+
+document.getElementById('snapshot-button').addEventListener('click', takeSnapshot);
+
+document.getElementById('detection-button').addEventListener('click', toggleDetection);
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    stopCamera();
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}MAIA - Home{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="hero">
+        <h1>Welcome to MAIA</h1>
+        <p>Your AI Assistant for Home Assistant</p>
+    </div>
+
+    <div class="features">
+        <div class="feature-card">
+            <i class="fas fa-camera"></i>
+            <h2>Camera Integration</h2>
+            <p>Face detection and recognition for enhanced security and automation.</p>
+            <a href="/camera" class="button">Open Camera</a>
+        </div>
+
+        <div class="feature-card">
+            <i class="fas fa-microphone"></i>
+            <h2>Voice Control</h2>
+            <p>Natural voice commands for seamless home automation control.</p>
+            <a href="/voice" class="button">Start Voice Control</a>
+        </div>
+
+        <div class="feature-card">
+            <i class="fas fa-users"></i>
+            <h2>Face Management</h2>
+            <p>Register and manage faces for personalized automation.</p>
+            <a href="/faces" class="button">Manage Faces</a>
+        </div>
+
+        <div class="feature-card">
+            <i class="fas fa-cog"></i>
+            <h2>Settings</h2>
+            <p>Configure MAIA to match your preferences and needs.</p>
+            <a href="/settings" class="button">Configure</a>
+        </div>
+    </div>
+
+    <div class="status-panel">
+        <h2>System Status</h2>
+        <div class="status-grid" id="status-grid">
+            <div class="status-item">
+                <i class="fas fa-server"></i>
+                <span class="status-label">API</span>
+                <span class="status-value" id="api-status">Checking...</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-camera"></i>
+                <span class="status-label">Camera</span>
+                <span class="status-value" id="camera-status">Checking...</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-microphone"></i>
+                <span class="status-label">Voice</span>
+                <span class="status-value" id="voice-status">Checking...</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-database"></i>
+                <span class="status-label">Storage</span>
+                <span class="status-value" id="storage-status">Checking...</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function updateStatus() {
+    try {
+        const response = await fetch('/health');
+        const data = await response.json();
+        
+        // Update status indicators
+        document.getElementById('api-status').textContent = data.status;
+        document.getElementById('camera-status').textContent = 
+            data.components.camera_processor ? 'Online' : 'Offline';
+        document.getElementById('voice-status').textContent = 
+            data.components.voice_processor ? 'Online' : 'Offline';
+        document.getElementById('storage-status').textContent = 
+            (data.components.face_storage && data.components.command_storage) ? 'Online' : 'Offline';
+            
+        // Add status classes
+        const statusElements = document.querySelectorAll('.status-value');
+        statusElements.forEach(element => {
+            element.classList.remove('status-online', 'status-offline');
+            element.classList.add(
+                element.textContent.toLowerCase() === 'online' ? 'status-online' : 'status-offline'
+            );
+        });
+        
+    } catch (error) {
+        console.error('Failed to update status:', error);
+        document.querySelectorAll('.status-value').forEach(element => {
+            element.textContent = 'Error';
+            element.classList.add('status-error');
+        });
+    }
+}
+
+// Update status every 30 seconds
+updateStatus();
+setInterval(updateStatus, 30000);
+</script>
+{% endblock %} 

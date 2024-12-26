@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}MAIA - Voice Control{% endblock %}
+
+{% block extra_css %}
+<style>
+.voice-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.voice-controls {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.voice-button {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: none;
+    background-color: var(--primary-color);
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.voice-button i {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.voice-button:hover {
+    transform: scale(1.05);
+    background-color: #0056b3;
+}
+
+.voice-button.active {
+    background-color: var(--danger-color);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.voice-status {
+    margin-top: 1rem;
+    font-size: 1.2rem;
+    color: var(--secondary-color);
+}
+
+.voice-output {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.voice-message {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    background-color: var(--light-color);
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.voice-message:last-child {
+    margin-bottom: 0;
+}
+
+.timestamp {
+    color: var(--secondary-color);
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.text {
+    flex-grow: 1;
+}
+
+.voice-settings {
+    margin-top: 2rem;
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.setting-label {
+    font-weight: bold;
+    color: var(--secondary-color);
+}
+
+.setting-input {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+select.setting-input {
+    background-color: white;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="voice-container">
+        <div class="voice-controls">
+            <button id="voice-button" class="voice-button">
+                <i class="fas fa-microphone"></i>
+                <span>Start</span>
+            </button>
+            <div class="voice-status" id="voice-status">Click to start voice recognition</div>
+        </div>
+
+        <div class="voice-output">
+            <h2>Voice Commands</h2>
+            <div id="voice-output"></div>
+        </div>
+
+        <div class="voice-settings">
+            <h2>Voice Settings</h2>
+            <div class="settings-grid">
+                <div class="setting-item">
+                    <label class="setting-label" for="language">Language</label>
+                    <select id="language" class="setting-input">
+                        <option value="en-US">English (US)</option>
+                        <option value="en-GB">English (UK)</option>
+                        <option value="es-ES">Spanish</option>
+                        <option value="fr-FR">French</option>
+                        <option value="de-DE">German</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label" for="recognition-engine">Recognition Engine</label>
+                    <select id="recognition-engine" class="setting-input">
+                        <option value="google">Google Speech</option>
+                        <option value="sphinx">CMU Sphinx</option>
+                        <option value="vosk">Vosk</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label" for="noise-reduction">
+                        <input type="checkbox" id="noise-reduction" checked>
+                        Enable Noise Reduction
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label" for="wake-word">
+                        <input type="checkbox" id="wake-word" checked>
+                        Use Wake Word
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let isRecording = false;
+let mediaRecorder = null;
+let audioChunks = [];
+
+// Initialize voice recognition
+async function initVoiceRecognition() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            audioChunks = [];
+            
+            // Send audio to server
+            const formData = new FormData();
+            formData.append('audio', audioBlob);
+            
+            try {
+                const response = await fetch('/voice/process', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                handleVoiceMessage(result);
+                
+                // Continue recording if still active
+                if (isRecording) {
+                    startRecording();
+                }
+                
+            } catch (error) {
+                console.error('Failed to process audio:', error);
+                updateStatus('Error processing audio');
+                
+                if (isRecording) {
+                    startRecording();
+                }
+            }
+        };
+        
+        updateStatus('Voice recognition ready');
+        
+    } catch (error) {
+        console.error('Failed to initialize voice recognition:', error);
+        updateStatus('Failed to access microphone');
+    }
+}
+
+// Start recording
+function startRecording() {
+    if (!mediaRecorder) return;
+    
+    try {
+        mediaRecorder.start();
+        setTimeout(() => {
+            if (mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+        }, 5000); // Record in 5-second chunks
+        
+    } catch (error) {
+        console.error('Failed to start recording:', error);
+        updateStatus('Failed to start recording');
+    }
+}
+
+// Stop recording
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+}
+
+// Toggle voice recognition
+function toggleVoiceRecognition() {
+    isRecording = !isRecording;
+    
+    const button = document.getElementById('voice-button');
+    button.classList.toggle('active');
+    button.querySelector('span').textContent = isRecording ? 'Stop' : 'Start';
+    
+    if (isRecording) {
+        updateStatus('Listening...');
+        startRecording();
+    } else {
+        updateStatus('Voice recognition stopped');
+        stopRecording();
+    }
+}
+
+// Update status message
+function updateStatus(message) {
+    document.getElementById('voice-status').textContent = message;
+}
+
+// Save voice settings
+function saveSettings() {
+    const settings = {
+        language: document.getElementById('language').value,
+        recognition_engine: document.getElementById('recognition-engine').value,
+        enable_noise_reduction: document.getElementById('noise-reduction').checked,
+        use_wake_word: document.getElementById('wake-word').checked
+    };
+    
+    // Send settings to server
+    fetch('/voice/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+    }).catch(error => {
+        console.error('Failed to save settings:', error);
+    });
+}
+
+// Event listeners
+document.getElementById('voice-button').addEventListener('click', toggleVoiceRecognition);
+
+// Settings change listeners
+document.querySelectorAll('.setting-input').forEach(input => {
+    input.addEventListener('change', saveSettings);
+});
+
+// Initialize on page load
+initVoiceRecognition();
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+    if (isRecording) {
+        stopRecording();
+    }
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+
+{% block title %}MAIA - Face Management{% endblock %}
+
+{% block extra_css %}
+<style>
+.faces-container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.faces-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.face-card {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s;
+}
+
+.face-card:hover {
+    transform: translateY(-5px);
+}
+
+.face-image {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    background-color: var(--light-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.face-image i {
+    font-size: 4rem;
+    color: var(--secondary-color);
+}
+
+.face-info {
+    padding: 1.5rem;
+}
+
+.face-name {
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.face-meta {
+    color: var(--secondary-color);
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+}
+
+.face-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.face-button {
+    flex: 1;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: background-color 0.3s;
+}
+
+.face-button.edit {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.face-button.delete {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.face-button:hover {
+    opacity: 0.9;
+}
+
+.add-face {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.add-face-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background-color: var(--success-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: background-color 0.3s;
+}
+
+.add-face-button:hover {
+    background-color: #218838;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 500px;
+    position: relative;
+}
+
+.modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--secondary-color);
+}
+
+.modal-title {
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+.form-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.form-preview {
+    width: 100%;
+    height: 200px;
+    border: 2px dashed var(--border-color);
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.form-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.form-preview i {
+    font-size: 3rem;
+    color: var(--secondary-color);
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+.form-button {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s;
+}
+
+.form-button.primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.form-button.secondary {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.form-button:hover {
+    opacity: 0.9;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="faces-container">
+        <div class="add-face">
+            <button id="add-face-button" class="add-face-button">
+                <i class="fas fa-user-plus"></i>
+                <span>Register New Face</span>
+            </button>
+        </div>
+
+        <div class="faces-grid" id="faces-grid">
+            <!-- Face cards will be added here dynamically -->
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Face Modal -->
+<div id="face-modal" class="modal">
+    <div class="modal-content">
+        <button class="modal-close" id="modal-close">
+            <i class="fas fa-times"></i>
+        </button>
+        <h2 class="modal-title">Register New Face</h2>
+        <form id="face-form">
+            <div class="form-group">
+                <label class="form-label" for="face-name">Name</label>
+                <input type="text" id="face-name" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Face Image</label>
+                <div class="form-preview" id="face-preview">
+                    <i class="fas fa-user"></i>
+                </div>
+                <input type="file" id="face-image" accept="image/*" hidden>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="face-notes">Notes</label>
+                <textarea id="face-notes" class="form-input" rows="3"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="form-button secondary" id="form-cancel">Cancel</button>
+                <button type="submit" class="form-button primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let faces = [];
+let editingFaceId = null;
+
+// Load faces from server
+async function loadFaces() {
+    try {
+        const response = await fetch('/faces');
+        faces = await response.json();
+        renderFaces();
+    } catch (error) {
+        console.error('Failed to load faces:', error);
+    }
+}
+
+// Render face cards
+function renderFaces() {
+    const grid = document.getElementById('faces-grid');
+    grid.innerHTML = '';
+    
+    faces.forEach(face => {
+        const card = document.createElement('div');
+        card.className = 'face-card';
+        card.innerHTML = `
+            <div class="face-image">
+                ${face.image ? `<img src="${face.image}" alt="${face.name}">` : '<i class="fas fa-user"></i>'}
+            </div>
+            <div class="face-info">
+                <div class="face-name">${face.name}</div>
+                <div class="face-meta">
+                    Added ${new Date(face.added_date).toLocaleDateString()}
+                </div>
+                <div class="face-actions">
+                    <button class="face-button edit" onclick="editFace('${face.id}')">
+                        <i class="fas fa-edit"></i>
+                        <span>Edit</span>
+                    </button>
+                    <button class="face-button delete" onclick="deleteFace('${face.id}')">
+                        <i class="fas fa-trash"></i>
+                        <span>Delete</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+// Show modal
+function showModal(title = 'Register New Face') {
+    document.getElementById('face-modal').classList.add('active');
+    document.querySelector('.modal-title').textContent = title;
+}
+
+// Hide modal
+function hideModal() {
+    document.getElementById('face-modal').classList.remove('active');
+    document.getElementById('face-form').reset();
+    document.getElementById('face-preview').innerHTML = '<i class="fas fa-user"></i>';
+    editingFaceId = null;
+}
+
+// Handle image preview
+function handleImagePreview(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('face-preview').innerHTML = `
+            <img src="${e.target.result}" alt="Preview">
+        `;
+    };
+    reader.readAsDataURL(file);
+}
+
+// Edit face
+function editFace(faceId) {
+    const face = faces.find(f => f.id === faceId);
+    if (!face) return;
+    
+    editingFaceId = faceId;
+    document.getElementById('face-name').value = face.name;
+    document.getElementById('face-notes').value = face.notes || '';
+    
+    if (face.image) {
+        document.getElementById('face-preview').innerHTML = `
+            <img src="${face.image}" alt="${face.name}">
+        `;
+    }
+    
+    showModal('Edit Face');
+}
+
+// Delete face
+async function deleteFace(faceId) {
+    if (!confirm('Are you sure you want to delete this face?')) return;
+    
+    try {
+        await fetch(`/faces/${faceId}`, { method: 'DELETE' });
+        faces = faces.filter(f => f.id !== faceId);
+        renderFaces();
+    } catch (error) {
+        console.error('Failed to delete face:', error);
+    }
+}
+
+// Handle form submission
+async function handleSubmit(event) {
+    event.preventDefault();
+    
+    const formData = new FormData();
+    formData.append('name', document.getElementById('face-name').value);
+    formData.append('notes', document.getElementById('face-notes').value);
+    
+    const imageFile = document.getElementById('face-image').files[0];
+    if (imageFile) {
+        formData.append('image', imageFile);
+    }
+    
+    try {
+        const url = editingFaceId ? `/faces/${editingFaceId}` : '/faces';
+        const method = editingFaceId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (editingFaceId) {
+            faces = faces.map(f => f.id === editingFaceId ? result : f);
+        } else {
+            faces.push(result);
+        }
+        
+        renderFaces();
+        hideModal();
+        
+    } catch (error) {
+        console.error('Failed to save face:', error);
+    }
+}
+
+// Event listeners
+document.getElementById('add-face-button').addEventListener('click', () => showModal());
+document.getElementById('modal-close').addEventListener('click', hideModal);
+document.getElementById('form-cancel').addEventListener('click', hideModal);
+document.getElementById('face-form').addEventListener('submit', handleSubmit);
+
+document.getElementById('face-preview').addEventListener('click', () => {
+    document.getElementById('face-image').click();
+});
+
+document.getElementById('face-image').addEventListener('change', handleImagePreview);
+
+// Load faces on page load
+loadFaces();
+</script>
+{% endblock %} 

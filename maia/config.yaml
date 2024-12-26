@@ -1,7 +1,7 @@
 name: "MAIA - My AI Assistant"
 version: "1.0.0"
 slug: "maia"
-description: "MAIA (My AI Assistant) - A powerful AI assistant for Home Assistant with face recognition and voice control"
+description: "Advanced Home Assistant Voice and Vision Integration"
 url: "https://github.com/kimasplund/maia"
 arch:
   - aarch64
@@ -16,11 +16,21 @@ map:
   - share:rw
   - config:rw
 ports:
-  8765/tcp: 8765
-  6379/tcp: 6379
+  8000/tcp: 8000
+  6379/tcp: null
 ports_description:
-  8765/tcp: "WebSocket server port"
-  6379/tcp: "Redis database port"
+  8000/tcp: Web interface
+  6379/tcp: Redis database
+webui: "http://[HOST]:[PORT:8000]"
+ingress: true
+ingress_port: 8000
+panel_icon: mdi:robot
+panel_title: MAIA
+hassio_api: true
+hassio_role: default
+homeassistant_api: true
+host_network: false
+auth_api: true
 options:
   camera:
     use_gpu: false
@@ -32,7 +42,7 @@ options:
       openmp: 4
       blas: 2
   voice:
-    recognition_engine: "sphinx"
+    recognition_engine: "google"
     language: "en-US"
     enable_noise_reduction: true
     thread_limits:
@@ -40,30 +50,30 @@ options:
       blas: 1
   websocket:
     host: "0.0.0.0"
-    port: 8765
+    port: 8000
   database:
     host: "localhost"
     port: 6379
 schema:
   camera:
     use_gpu: bool
-    model_type: str
-    tolerance: float
+    model_type: list(hog|cnn)
+    tolerance: float(0,1)
     batch_processing: bool
-    max_batch_size: int
+    max_batch_size: int(1,64)
     thread_limits:
-      openmp: int
-      blas: int
+      openmp: int(1,8)
+      blas: int(1,4)
   voice:
-    recognition_engine: str
+    recognition_engine: list(google|sphinx|vosk)
     language: str
     enable_noise_reduction: bool
     thread_limits:
-      openmp: int
-      blas: int
+      openmp: int(1,4)
+      blas: int(1,2)
   websocket:
     host: str
-    port: int
+    port: port
   database:
     host: str
-    port: int 
+    port: port 

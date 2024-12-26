@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+
+{% block title %}MAIA - Settings{% endblock %}
+
+{% block extra_css %}
+<style>
+.settings-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.settings-section {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.settings-section h2 {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-grid {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.setting-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.setting-label {
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.setting-description {
+    color: var(--secondary-color);
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+
+.setting-input {
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+    background-color: white;
+}
+
+.setting-input[type="checkbox"] {
+    width: 1.5rem;
+    height: 1.5rem;
+    margin: 0;
+}
+
+.setting-input[type="range"] {
+    width: 100%;
+    height: 0.5rem;
+    border-radius: 0.25rem;
+    background-color: var(--border-color);
+    -webkit-appearance: none;
+}
+
+.setting-input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    cursor: pointer;
+}
+
+.setting-value {
+    color: var(--secondary-color);
+    font-size: 0.875rem;
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.settings-button {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background-color 0.3s;
+}
+
+.settings-button.primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.settings-button.secondary {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+.settings-button:hover {
+    opacity: 0.9;
+}
+
+.settings-button i {
+    font-size: 1.2rem;
+}
+
+.settings-status {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    padding: 1rem 2rem;
+    border-radius: 4px;
+    color: white;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.settings-status.success {
+    background-color: var(--success-color);
+    opacity: 1;
+}
+
+.settings-status.error {
+    background-color: var(--danger-color);
+    opacity: 1;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="settings-container">
+        <form id="settings-form">
+            <!-- Camera Settings -->
+            <div class="settings-section">
+                <h2>Camera Settings</h2>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label class="setting-label" for="camera-model">
+                            Face Detection Model
+                            <span class="setting-value">Current: <span id="camera-model-value">HOG</span></span>
+                        </label>
+                        <div class="setting-description">
+                            Choose between HOG (CPU) or CNN (GPU) face detection model
+                        </div>
+                        <select id="camera-model" class="setting-input" name="camera.model_type">
+                            <option value="hog">HOG (CPU)</option>
+                            <option value="cnn">CNN (GPU)</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label" for="camera-tolerance">
+                            Face Recognition Tolerance
+                            <span class="setting-value">Current: <span id="camera-tolerance-value">0.6</span></span>
+                        </label>
+                        <div class="setting-description">
+                            Lower values are more strict (0.0 - 1.0)
+                        </div>
+                        <input type="range" id="camera-tolerance" class="setting-input" 
+                               name="camera.tolerance" min="0" max="1" step="0.1" value="0.6">
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <span>Use GPU Acceleration</span>
+                            <input type="checkbox" id="camera-gpu" class="setting-input" 
+                                   name="camera.use_gpu">
+                        </label>
+                        <div class="setting-description">
+                            Enable GPU acceleration for face detection (requires CUDA)
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Voice Settings -->
+            <div class="settings-section">
+                <h2>Voice Settings</h2>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label class="setting-label" for="voice-engine">
+                            Recognition Engine
+                            <span class="setting-value">Current: <span id="voice-engine-value">Google</span></span>
+                        </label>
+                        <div class="setting-description">
+                            Choose the speech recognition engine
+                        </div>
+                        <select id="voice-engine" class="setting-input" name="voice.recognition_engine">
+                            <option value="google">Google Speech</option>
+                            <option value="sphinx">CMU Sphinx</option>
+                            <option value="vosk">Vosk</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label" for="voice-language">
+                            Language
+                            <span class="setting-value">Current: <span id="voice-language-value">en-US</span></span>
+                        </label>
+                        <div class="setting-description">
+                            Select recognition language
+                        </div>
+                        <select id="voice-language" class="setting-input" name="voice.language">
+                            <option value="en-US">English (US)</option>
+                            <option value="en-GB">English (UK)</option>
+                            <option value="es-ES">Spanish</option>
+                            <option value="fr-FR">French</option>
+                            <option value="de-DE">German</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <span>Noise Reduction</span>
+                            <input type="checkbox" id="voice-noise-reduction" class="setting-input" 
+                                   name="voice.enable_noise_reduction">
+                        </label>
+                        <div class="setting-description">
+                            Enable background noise reduction
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Settings -->
+            <div class="settings-section">
+                <h2>System Settings</h2>
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label class="setting-label" for="system-threads">
+                            Thread Limits
+                            <span class="setting-value">Current: <span id="system-threads-value">4</span></span>
+                        </label>
+                        <div class="setting-description">
+                            Maximum number of processing threads
+                        </div>
+                        <input type="number" id="system-threads" class="setting-input" 
+                               name="system.thread_limits" min="1" max="8" value="4">
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <span>Debug Mode</span>
+                            <input type="checkbox" id="system-debug" class="setting-input" 
+                                   name="system.debug_mode">
+                        </label>
+                        <div class="setting-description">
+                            Enable detailed logging for debugging
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="button" class="settings-button secondary" id="reset-button">
+                    <i class="fas fa-undo"></i>
+                    <span>Reset to Default</span>
+                </button>
+                <button type="submit" class="settings-button primary">
+                    <i class="fas fa-save"></i>
+                    <span>Save Changes</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="settings-status" class="settings-status"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Load current settings
+async function loadSettings() {
+    try {
+        const response = await fetch('/settings');
+        const settings = await response.json();
+        
+        // Update form values
+        Object.entries(settings).forEach(([key, value]) => {
+            const input = document.querySelector(`[name="${key}"]`);
+            if (input) {
+                if (input.type === 'checkbox') {
+                    input.checked = value;
+                } else {
+                    input.value = value;
+                }
+                
+                // Update value displays
+                const valueDisplay = document.getElementById(`${input.id}-value`);
+                if (valueDisplay) {
+                    valueDisplay.textContent = value;
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('Failed to load settings:', error);
+        showStatus('Failed to load settings', 'error');
+    }
+}
+
+// Save settings
+async function saveSettings(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const settings = {};
+    
+    formData.forEach((value, key) => {
+        // Handle nested settings (e.g., camera.model_type)
+        const parts = key.split('.');
+        let current = settings;
+        
+        for (let i = 0; i < parts.length - 1; i++) {
+            current[parts[i]] = current[parts[i]] || {};
+            current = current[parts[i]];
+        }
+        
+        // Convert value types
+        const input = document.querySelector(`[name="${key}"]`);
+        if (input.type === 'checkbox') {
+            current[parts[parts.length - 1]] = input.checked;
+        } else if (input.type === 'number' || input.type === 'range') {
+            current[parts[parts.length - 1]] = Number(value);
+        } else {
+            current[parts[parts.length - 1]] = value;
+        }
+    });
+    
+    try {
+        const response = await fetch('/settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(settings)
+        });
+        
+        if (response.ok) {
+            showStatus('Settings saved successfully', 'success');
+        } else {
+            throw new Error('Failed to save settings');
+        }
+        
+    } catch (error) {
+        console.error('Failed to save settings:', error);
+        showStatus('Failed to save settings', 'error');
+    }
+}
+
+// Reset settings to default
+async function resetSettings() {
+    if (!confirm('Are you sure you want to reset all settings to default?')) return;
+    
+    try {
+        const response = await fetch('/settings/reset', { method: 'POST' });
+        if (response.ok) {
+            await loadSettings();
+            showStatus('Settings reset to default', 'success');
+        } else {
+            throw new Error('Failed to reset settings');
+        }
+        
+    } catch (error) {
+        console.error('Failed to reset settings:', error);
+        showStatus('Failed to reset settings', 'error');
+    }
+}
+
+// Show status message
+function showStatus(message, type) {
+    const status = document.getElementById('settings-status');
+    status.textContent = message;
+    status.className = `settings-status ${type}`;
+    
+    setTimeout(() => {
+        status.className = 'settings-status';
+    }, 3000);
+}
+
+// Update value displays
+function updateValueDisplay(event) {
+    const valueDisplay = document.getElementById(`${event.target.id}-value`);
+    if (valueDisplay) {
+        valueDisplay.textContent = event.target.value;
+    }
+}
+
+// Event listeners
+document.getElementById('settings-form').addEventListener('submit', saveSettings);
+document.getElementById('reset-button').addEventListener('click', resetSettings);
+
+// Add value display updates for range inputs
+document.querySelectorAll('input[type="range"]').forEach(input => {
+    input.addEventListener('input', updateValueDisplay);
+});
+
+// Load settings on page load
+loadSettings();
+</script>
+{% endblock %} 

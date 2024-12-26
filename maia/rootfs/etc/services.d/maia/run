@@ -11,4 +11,5 @@ done
 bashio::log.info "Redis is ready"
 
 # Start MAIA
-python3 -m api.main 
+cd /app
+exec python3 -m api.main 

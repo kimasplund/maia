@@ -1,0 +1,7 @@
+#!/usr/bin/execlineb -S0
+
+# Stop Redis server
+redis-cli shutdown
+
+# Take down the S6 supervision tree
+s6-svscanctl -t /var/run/s6/services 

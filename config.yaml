@@ -1,8 +1,8 @@
-name: "MAIA - AI Assistant"
+name: "MAIA - My AI Assistant"
 version: "1.0.0"
 slug: "maia"
-description: "MAIA (Modular AI Assistant) - A powerful AI assistant for Home Assistant with face recognition and voice control"
-url: "https://github.com/yourusername/ha_maia"
+description: "MAIA (My AI Assistant) - A powerful AI assistant for Home Assistant with face recognition and voice control"
+url: "https://github.com/kimasplund/maia"
 arch:
   - aarch64
   - amd64

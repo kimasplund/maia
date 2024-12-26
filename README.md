@@ -35,7 +35,7 @@ MAIA is an extensive Home Assistant module that provides advanced voice and visi
   - Context-aware command processing
 
 ### Web Interface
-Access the comprehensive web interface at `http://your-home-assistant:8123/maia/dashboard`
+Access the comprehensive web interface at `http://homeassistant:8123/maia/dashboard`
 
 - **Dashboard**
   - System statistics and health monitoring

@@ -48,7 +48,7 @@ CMD [ "/run.sh" ]
 
 # Labels
 LABEL \
-    io.hass.name="MAIA - AI Assistant" \
-    io.hass.description="MAIA (Modular AI Assistant) - A powerful AI assistant for Home Assistant" \
+    io.hass.name="MAIA - My AI Assistant" \
+    io.hass.description="MAIA (My AI Assistant) - A powerful AI assistant for Home Assistant" \
     io.hass.type="addon" \
-    io.hass.version="1.0.0" 
+    io.hass.version="1.0.0"

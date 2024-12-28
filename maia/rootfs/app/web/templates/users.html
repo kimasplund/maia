@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% block title %}MAIA - User Management{% endblock %}
+
+{% block extra_css %}
+<style>
+.user-card {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.data-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.data-item {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.confidence-high { color: #4caf50; }
+.confidence-medium { color: #ff9800; }
+.confidence-low { color: #f44336; }
+
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header">
+        <h1>User Management</h1>
+        <button onclick="showAddUserModal()" class="button">
+            <i class="fas fa-user-plus"></i> Add User
+        </button>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-button active" onclick="showTab('users')">Users</button>
+        <button class="tab-button" onclick="showTab('faces')">Faces</button>
+        <button class="tab-button" onclick="showTab('voices')">Voices</button>
+        <button class="tab-button" onclick="showTab('devices')">Devices</button>
+    </div>
+
+    <!-- Users Tab -->
+    <div id="users-tab" class="tab-content active">
+        {% for user in users %}
+        <div class="user-card">
+            <h3>{{ user.name }}</h3>
+            <p>Home Assistant ID: {{ user.id }}</p>
+            <div class="stats">
+                <span>{{ user.faces|length }} Faces</span>
+                <span>{{ user.voices|length }} Voice Prints</span>
+                <span>{{ user.devices|length }} Devices</span>
+            </div>
+            <div class="action-buttons">
+                <button onclick="editUser('{{ user.id }}')" class="button">
+                    <i class="fas fa-edit"></i> Edit
+                </button>
+                <button onclick="deleteUser('{{ user.id }}')" class="button danger">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Faces Tab -->
+    <div id="faces-tab" class="tab-content">
+        <div class="data-grid">
+            {% for face in faces %}
+            <div class="data-item">
+                <div class="preview">
+                    <img src="{{ face.metadata.image_url }}" alt="Face preview">
+                </div>
+                <div class="info">
+                    <p class="confidence-{{ face.confidence_level }}">
+                        Confidence: {{ face.confidence }}%
+                    </p>
+                    <p>Captured: {{ face.created_at|datetime }}</p>
+                    {% if face.user %}
+                    <p>Mapped to: {{ face.user.name }}</p>
+                    {% else %}
+                    <p>Unmapped</p>
+                    {% endif %}
+                </div>
+                <div class="action-buttons">
+                    <button onclick="mapFace('{{ face.id }}')" class="button">
+                        <i class="fas fa-link"></i> Map
+                    </button>
+                    <button onclick="rejectFace('{{ face.id }}')" class="button warning">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Voices Tab -->
+    <div id="voices-tab" class="tab-content">
+        <div class="data-grid">
+            {% for voice in voices %}
+            <div class="data-item">
+                <div class="preview">
+                    <button onclick="playVoiceSample('{{ voice.id }}')" class="button">
+                        <i class="fas fa-play"></i> Play
+                    </button>
+                </div>
+                <div class="info">
+                    <p class="confidence-{{ voice.confidence_level }}">
+                        Confidence: {{ voice.confidence }}%
+                    </p>
+                    <p>Captured: {{ voice.created_at|datetime }}</p>
+                    {% if voice.user %}
+                    <p>Mapped to: {{ voice.user.name }}</p>
+                    {% else %}
+                    <p>Unmapped</p>
+                    {% endif %}
+                </div>
+                <div class="action-buttons">
+                    <button onclick="mapVoice('{{ voice.id }}')" class="button">
+                        <i class="fas fa-link"></i> Map
+                    </button>
+                    <button onclick="rejectVoice('{{ voice.id }}')" class="button warning">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Devices Tab -->
+    <div id="devices-tab" class="tab-content">
+        <div class="data-grid">
+            {% for device in devices %}
+            <div class="data-item">
+                <div class="info">
+                    <p>{{ device.name or device.id }}</p>
+                    <p>Type: {{ device.device_type }}</p>
+                    <p>Last seen: {{ device.last_seen|datetime }}</p>
+                    {% if device.user %}
+                    <p>Mapped to: {{ device.user.name }}</p>
+                    {% else %}
+                    <p>Unmapped</p>
+                    {% endif %}
+                </div>
+                <div class="action-buttons">
+                    <button onclick="mapDevice('{{ device.id }}')" class="button">
+                        <i class="fas fa-link"></i> Map
+                    </button>
+                    <button onclick="forgetDevice('{{ device.id }}')" class="button warning">
+                        <i class="fas fa-trash"></i> Forget
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+<div id="add-user-modal" class="modal">
+    <div class="modal-content">
+        <h2>Add User</h2>
+        <form id="add-user-form">
+            <div class="form-group">
+                <label>Home Assistant User</label>
+                <select name="ha_user" required>
+                    {% for ha_user in ha_users %}
+                    <option value="{{ ha_user.id }}">{{ ha_user.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Display Name</label>
+                <input type="text" name="name" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="button">Add User</button>
+                <button type="button" onclick="hideModal('add-user-modal')" class="button secondary">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="map-data-modal" class="modal">
+    <div class="modal-content">
+        <h2>Map to User</h2>
+        <form id="map-data-form">
+            <input type="hidden" name="data_type">
+            <input type="hidden" name="data_id">
+            <div class="form-group">
+                <label>Select User</label>
+                <select name="user_id" required>
+                    {% for user in users %}
+                    <option value="{{ user.id }}">{{ user.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Confidence</label>
+                <input type="range" name="confidence" min="0" max="100" value="100">
+                <span class="confidence-value">100%</span>
+            </div>
+            <div class="form-group">
+                <label>Notes</label>
+                <textarea name="notes"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="button">Map</button>
+                <button type="button" onclick="hideModal('map-data-modal')" class="button secondary">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Tab switching
+function showTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(tabName + '-tab').classList.add('active');
+    event.target.classList.add('active');
+}
+
+// Modal handling
+function showModal(modalId) {
+    document.getElementById(modalId).classList.add('active');
+}
+
+function hideModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+function showAddUserModal() {
+    showModal('add-user-modal');
+}
+
+// User management
+async function addUser(event) {
+    event.preventDefault();
+    const form = event.target;
+    const data = new FormData(form);
+    
+    try {
+        const response = await fetch('/api/users', {
+            method: 'POST',
+            body: data
+        });
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to add user');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to add user');
+    }
+}
+
+// Data mapping
+async function mapData(type, id, userId) {
+    const form = document.getElementById('map-data-form');
+    form.elements.data_type.value = type;
+    form.elements.data_id.value = id;
+    showModal('map-data-modal');
+}
+
+function mapFace(id) { mapData('face', id); }
+function mapVoice(id) { mapData('voice', id); }
+function mapDevice(id) { mapData('device', id); }
+
+// Rejection handling
+async function rejectData(type, id) {
+    try {
+        const response = await fetch(`/api/${type}s/${id}/reject`, {
+            method: 'POST'
+        });
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert(`Failed to reject ${type}`);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert(`Failed to reject ${type}`);
+    }
+}
+
+function rejectFace(id) { rejectData('face', id); }
+function rejectVoice(id) { rejectVoice('voice', id); }
+function forgetDevice(id) { rejectData('device', id); }
+
+// Voice playback
+function playVoiceSample(id) {
+    const audio = new Audio(`/api/voices/${id}/audio`);
+    audio.play();
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up form handlers
+    document.getElementById('add-user-form').addEventListener('submit', addUser);
+    document.getElementById('map-data-form').addEventListener('submit', handleDataMapping);
+    
+    // Set up confidence slider
+    const confidenceSlider = document.querySelector('input[name="confidence"]');
+    const confidenceValue = document.querySelector('.confidence-value');
+    confidenceSlider.addEventListener('input', function() {
+        confidenceValue.textContent = this.value + '%';
+    });
+});
+</script>
+{% endblock %} 

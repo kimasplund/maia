@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAIA - Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="login-form">
+            <h1>Login to MAIA</h1>
+            <p class="info-text">Please enter your Home Assistant Long-Lived Access Token</p>
+            {% if ha_url %}
+            <p class="ha-url">Connected to: {{ ha_url }}</p>
+            {% endif %}
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="token">Access Token:</label>
+                    <input type="password" id="token" name="password" required>
+                    <small class="help-text">You can create a Long-Lived Access Token in your Home Assistant profile</small>
+                </div>
+                <button type="submit" class="button">Connect</button>
+            </form>
+            <div id="error-message" class="error-message"></div>
+        </div>
+    </div>
+
+    <script>
+        async function handleLogin(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            formData.append('username', 'homeassistant');  // Username is not used but required by the API
+
+            try {
+                const response = await fetch('/token', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('token', data.access_token);
+                    window.location.href = '/';
+                } else {
+                    const error = await response.json();
+                    document.getElementById('error-message').textContent = error.detail;
+                }
+            } catch (error) {
+                document.getElementById('error-message').textContent = 'An error occurred during login';
+            }
+        }
+    </script>
+</body>
+</html> 

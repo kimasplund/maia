@@ -15,23 +15,69 @@ init: false
 map:
   - share:rw
   - config:rw
-ports:
-  8000/tcp: 8000
-  6379/tcp: null
-ports_description:
-  8000/tcp: Web interface
-  6379/tcp: Redis database
-webui: "http://[HOST]:[PORT:8000]"
-ingress: true
-ingress_port: 8000
+services:
+  - "mqtt:need"
+  - name: valkey
+    image: valkey/valkey:8-alpine3.20
+    volumes:
+      - /data/valkey:/data
+    ports:
+      - "7000:7000"
+    healthcheck:
+      test: ["CMD", "valkey", "PING"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    init: true
+    privileged: false
+    network_mode: host
+    restart: unless-stopped
+  - name: postgis
+    image: "postgis/postgis:17-3.5-alpine"
+    environment:
+      POSTGRES_USER: "!secret postgres_user"
+      POSTGRES_PASSWORD: "!secret postgres_password"
+      POSTGRES_DB: "!secret postgres_db"
+    volumes:
+      - /data/postgis:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U !secret postgres_user -d !secret postgres_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    init: true
+    privileged: false
+    network_mode: host
+    restart: unless-stopped
+discovery:
+  - mqtt
 panel_icon: mdi:robot
 panel_title: MAIA
-hassio_api: true
-hassio_role: default
-homeassistant_api: true
+panel_admin: true
+ingress: true
+ingress_port: 8000
 host_network: false
-auth_api: true
+ports:
+  8000/tcp: 8000
+  5432/tcp: 5432 # PostGIS port
+ports_description:
+  8000/tcp: "Web interface"
+  5432/tcp: "PostGIS database"
+hassio_api: true
+hassio_role: manager
+homeassistant_api: true
 options:
+  mqtt:
+    broker: "core-mosquitto"
+    port: 1883
+    username: ""
+    password: ""
+  database:
+    postgres_user: "maia"
+    postgres_password: ""
+    postgres_db: "maia"
   camera:
     use_gpu: false
     model_type: "hog"
@@ -50,11 +96,21 @@ options:
       blas: 1
   websocket:
     host: "0.0.0.0"
-    port: 8000
-  database:
-    host: "localhost"
-    port: 6379
+  ble_tracking:
+    enabled: true
+    scan_interval: 5
+    min_rssi: -90
+    position_update_interval: 1
 schema:
+  mqtt:
+    broker: str
+    port: port
+    username: str
+    password: password
+  database:
+    postgres_user: str
+    postgres_password: password
+    postgres_db: str
   camera:
     use_gpu: bool
     model_type: list(hog|cnn)
@@ -73,7 +129,9 @@ schema:
       blas: int(1,2)
   websocket:
     host: str
-    port: port
-  database:
-    host: str
-    port: port 
+  ble_tracking:
+    enabled: bool
+    scan_interval: int(1,60)
+    min_rssi: int(-100,-40)
+    position_update_interval: int(1,60)
+image: "ghcr.io/{repository}/maia" 

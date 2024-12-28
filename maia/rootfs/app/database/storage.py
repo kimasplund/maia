@@ -1,31 +1,100 @@
 """
 Storage module for MAIA.
-Handles face and command data storage.
+Handles face and command data storage using Valkey.
 """
-import redis
 import json
 import numpy as np
 from typing import Dict, List, Optional, Any, Tuple
 import logging
 import asyncio
 from datetime import datetime, timedelta
+from ..core.valkey_pool import ValKeyPool, ValKeyConnection
 
 _LOGGER = logging.getLogger(__name__)
+
+class ValKeyError(Exception):
+    """Valkey specific errors."""
+    pass
 
 class StorageBase:
     """Base class for storage handlers."""
     
-    def __init__(self, redis_host: str = "localhost", redis_port: int = 6379):
+    def __init__(
+        self,
+        valkey_host: str = "valkey",
+        valkey_port: int = 7000,
+        min_pool_size: int = 2,
+        max_pool_size: int = 10,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        command_timeout: float = 5.0
+    ):
         """Initialize storage base."""
-        self.redis = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            decode_responses=True
+        self.pool = ValKeyPool(
+            host=valkey_host,
+            port=valkey_port,
+            min_size=min_pool_size,
+            max_size=max_pool_size,
+            connection_timeout=command_timeout,
+            health_check_interval=30  # 30 seconds
         )
         self.prefix = "maia:"
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.command_timeout = command_timeout
+        self._health_check_task: Optional[asyncio.Task] = None
+        
+    async def start(self):
+        """Start storage handler."""
+        await self.pool.start()
+        # Start health check task
+        self._health_check_task = asyncio.create_task(self._monitor_health())
+        
+    async def stop(self):
+        """Stop storage handler."""
+        if self._health_check_task:
+            self._health_check_task.cancel()
+            try:
+                await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+        await self.pool.stop()
+        
+    async def _monitor_health(self):
+        """Monitor storage health and log issues."""
+        while True:
+            try:
+                await asyncio.sleep(60)  # Check every minute
+                stats = self.pool.get_stats()
+                
+                # Log warnings for concerning stats
+                if stats["unhealthy_connections"] > 0:
+                    _LOGGER.warning(
+                        f"{stats['unhealthy_connections']} unhealthy Valkey connections detected"
+                    )
+                
+                if stats["total_errors"] > 0:
+                    error_rate = stats["total_errors"] / max(stats["total_commands"], 1)
+                    if error_rate > 0.1:  # More than 10% error rate
+                        _LOGGER.warning(
+                            f"High Valkey error rate: {error_rate:.1%} "
+                            f"({stats['total_errors']}/{stats['total_commands']} commands failed)"
+                        )
+                
+                # Log detailed connection stats at debug level
+                for conn_stat in stats["connection_stats"]:
+                    if not conn_stat["is_healthy"]:
+                        _LOGGER.debug(
+                            f"Unhealthy connection {conn_stat['id']}: "
+                            f"{conn_stat['consecutive_errors']} consecutive errors, "
+                            f"last error: {conn_stat['last_error']}"
+                        )
+                    
+            except Exception as e:
+                _LOGGER.error(f"Error in health monitor: {str(e)}")
         
     def _key(self, *parts: str) -> str:
-        """Create Redis key with prefix."""
+        """Create Valkey key with prefix."""
         return f"{self.prefix}{':'.join(parts)}"
         
     def _encode_array(self, arr: np.ndarray) -> str:
@@ -36,12 +105,102 @@ class StorageBase:
         """Decode string to numpy array."""
         return np.array(json.loads(s))
         
+    async def _valkey_cmd(self, *args) -> str:
+        """Execute Valkey command with retries using connection pool."""
+        last_error = None
+        conn: Optional[ValKeyConnection] = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                # Get connection from pool
+                if not conn:
+                    conn = await self.pool.acquire()
+                
+                try:
+                    # Execute command with timeout
+                    return await asyncio.wait_for(
+                        conn.execute(*args),
+                        timeout=self.command_timeout
+                    )
+                except asyncio.TimeoutError:
+                    _LOGGER.warning(f"Command timed out on attempt {attempt + 1}")
+                    # Force connection check on timeout
+                    await conn.health_check()
+                    raise
+                finally:
+                    if conn:
+                        await self.pool.release(conn)
+                        conn = None
+                    
+            except Exception as e:
+                last_error = e
+                if attempt < self.max_retries - 1:
+                    _LOGGER.warning(
+                        f"Valkey command failed (attempt {attempt + 1}/{self.max_retries}): {str(e)}"
+                    )
+                    await asyncio.sleep(self.retry_delay * (attempt + 1))  # Exponential backoff
+                    # Get fresh connection for retry
+                    if conn:
+                        await self.pool.release(conn)
+                        conn = None
+                continue
+                
+        _LOGGER.error(f"Valkey command failed after {self.max_retries} attempts: {str(last_error)}")
+        raise ValKeyError(f"Command failed: {str(last_error)}")
+        
+    async def ensure_connection(self) -> bool:
+        """Ensure Valkey connection is available."""
+        try:
+            # Try to execute a PING command
+            await self._valkey_cmd("PING")
+            
+            # Check pool health
+            stats = self.pool.get_stats()
+            if stats["unhealthy_connections"] > 0:
+                _LOGGER.warning(
+                    f"Pool has {stats['unhealthy_connections']} unhealthy connections"
+                )
+                
+            return True
+            
+        except Exception as e:
+            _LOGGER.error(f"Failed to connect to Valkey: {str(e)}")
+            return False
+            
+    def get_stats(self) -> Dict[str, Any]:
+        """Get detailed storage statistics."""
+        pool_stats = self.pool.get_stats()
+        return {
+            "pool": pool_stats,
+            "prefix": self.prefix,
+            "max_retries": self.max_retries,
+            "retry_delay": self.retry_delay,
+            "command_timeout": self.command_timeout,
+            "error_rate": (
+                pool_stats["total_errors"] / max(pool_stats["total_commands"], 1)
+            )
+        }
+
 class FaceStorage(StorageBase):
-    """Storage handler for face data."""
+    """Storage handler for face data using Valkey."""
     
-    def __init__(self, redis_host: str = "localhost", redis_port: int = 6379):
+    def __init__(
+        self,
+        valkey_host: str = "valkey",
+        valkey_port: int = 7000,
+        min_pool_size: int = 2,
+        max_pool_size: int = 10
+    ):
         """Initialize face storage."""
-        super().__init__(redis_host, redis_port)
+        super().__init__(
+            valkey_host=valkey_host,
+            valkey_port=valkey_port,
+            min_pool_size=min_pool_size,
+            max_pool_size=max_pool_size,
+            max_retries=3,
+            retry_delay=1.0,
+            command_timeout=5.0
+        )
         self.prefix = "maia:face:"
         
     async def store_face(
@@ -52,18 +211,19 @@ class FaceStorage(StorageBase):
     ) -> bool:
         """Store face encoding and metadata."""
         try:
-            # Store face encoding
+            # Store face encoding with pipeline
             encoding_key = self._key(user_id, "encoding")
-            await self.redis.set(
-                encoding_key,
-                self._encode_array(encoding)
-            )
+            await self._valkey_cmd("SET", encoding_key, self._encode_array(encoding))
             
             # Store metadata if provided
             if metadata:
                 metadata_key = self._key(user_id, "metadata")
-                await self.redis.hmset(metadata_key, metadata)
-                
+                # Build HSET command with multiple field-value pairs
+                hset_args = ["HSET", metadata_key]
+                for key, value in metadata.items():
+                    hset_args.extend([key, json.dumps(value)])
+                await self._valkey_cmd(*hset_args)
+                    
             return True
             
         except Exception as e:
@@ -78,70 +238,45 @@ class FaceStorage(StorageBase):
         try:
             # Get face encoding
             encoding_key = self._key(user_id, "encoding")
-            encoding_str = await self.redis.get(encoding_key)
+            encoding_str = await self._valkey_cmd("GET", encoding_key)
             encoding = self._decode_array(encoding_str) if encoding_str else None
             
             # Get metadata
             metadata_key = self._key(user_id, "metadata")
-            metadata = await self.redis.hgetall(metadata_key)
-            
+            metadata_str = await self._valkey_cmd("HGETALL", metadata_key)
+            metadata = {}
+            if metadata_str:
+                pairs = metadata_str.split("\n")
+                for i in range(0, len(pairs), 2):
+                    if i + 1 < len(pairs):
+                        metadata[pairs[i]] = json.loads(pairs[i + 1])
+                        
             return encoding, metadata
             
         except Exception as e:
             _LOGGER.error(f"Failed to get face: {str(e)}")
             return None, None
-            
-    def get_all_encodings_sync(self) -> Dict[str, np.ndarray]:
-        """Get all face encodings (synchronous version)."""
-        try:
-            # Get all user IDs
-            pattern = self._key("*", "encoding")
-            encoding_keys = self.redis.keys(pattern)
-            
-            # Get encodings
-            encodings = {}
-            for key in encoding_keys:
-                user_id = key.split(":")[-2]
-                encoding_str = self.redis.get(key)
-                if encoding_str:
-                    encodings[user_id] = self._decode_array(encoding_str)
-                    
-            return encodings
-            
-        except Exception as e:
-            _LOGGER.error(f"Failed to get all encodings: {str(e)}")
-            return {}
-            
-    def get_user_info_sync(self, user_id: str) -> Dict[str, Any]:
-        """Get user info (synchronous version)."""
-        try:
-            metadata_key = self._key(user_id, "metadata")
-            return self.redis.hgetall(metadata_key)
-            
-        except Exception as e:
-            _LOGGER.error(f"Failed to get user info: {str(e)}")
-            return {}
-            
-    async def delete_face(self, user_id: str) -> bool:
-        """Delete face data."""
-        try:
-            # Delete encoding and metadata
-            encoding_key = self._key(user_id, "encoding")
-            metadata_key = self._key(user_id, "metadata")
-            
-            await self.redis.delete(encoding_key, metadata_key)
-            return True
-            
-        except Exception as e:
-            _LOGGER.error(f"Failed to delete face: {str(e)}")
-            return False
-            
+
 class CommandStorage(StorageBase):
-    """Storage handler for command data."""
+    """Storage handler for command data using Valkey."""
     
-    def __init__(self, redis_host: str = "localhost", redis_port: int = 6379):
+    def __init__(
+        self,
+        valkey_host: str = "valkey",
+        valkey_port: int = 7000,
+        min_pool_size: int = 2,
+        max_pool_size: int = 10
+    ):
         """Initialize command storage."""
-        super().__init__(redis_host, redis_port)
+        super().__init__(
+            valkey_host=valkey_host,
+            valkey_port=valkey_port,
+            min_pool_size=min_pool_size,
+            max_pool_size=max_pool_size,
+            max_retries=3,
+            retry_delay=1.0,
+            command_timeout=5.0
+        )
         self.prefix = "maia:cmd:"
         
     async def store_command(
@@ -155,12 +290,17 @@ class CommandStorage(StorageBase):
             cmd_id = f"cmd_{datetime.now().timestamp()}"
             cmd_key = self._key(cmd_id)
             
-            # Store command data
-            await self.redis.hmset(cmd_key, command)
+            # Build HSET command with multiple field-value pairs
+            hset_args = ["HSET", cmd_key]
+            for key, value in command.items():
+                hset_args.extend([key, json.dumps(value)])
             
+            # Store command data
+            await self._valkey_cmd(*hset_args)
+                
             # Set TTL if specified
             if ttl:
-                await self.redis.expire(cmd_key, ttl)
+                await self._valkey_cmd("EXPIRE", cmd_key, str(ttl))
                 
             return True
             
@@ -172,7 +312,16 @@ class CommandStorage(StorageBase):
         """Get command data."""
         try:
             cmd_key = self._key(cmd_id)
-            return await self.redis.hgetall(cmd_key)
+            result = await self._valkey_cmd("HGETALL", cmd_key)
+            
+            command = {}
+            if result:
+                pairs = result.split("\n")
+                for i in range(0, len(pairs), 2):
+                    if i + 1 < len(pairs):
+                        command[pairs[i]] = json.loads(pairs[i + 1])
+                        
+            return command
             
         except Exception as e:
             _LOGGER.error(f"Failed to get command: {str(e)}")
@@ -187,20 +336,18 @@ class CommandStorage(StorageBase):
         try:
             # Get command keys sorted by timestamp
             pattern = self._key("cmd_*")
-            cmd_keys = await self.redis.keys(pattern)
-            cmd_keys.sort(reverse=True)
+            keys_str = await self._valkey_cmd("KEYS", pattern)
+            cmd_keys = sorted(keys_str.split("\n") if keys_str else [], reverse=True)
             
             # Apply limit and offset
             cmd_keys = cmd_keys[offset:offset + limit]
             
-            # Get command data
-            commands = []
-            for key in cmd_keys:
-                cmd_data = await self.redis.hgetall(key)
-                if cmd_data:
-                    commands.append(cmd_data)
-                    
-            return commands
+            # Get command data in parallel
+            tasks = [self.get_command(key.split(":")[-1]) for key in cmd_keys]
+            commands = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Filter out errors and None values
+            return [cmd for cmd in commands if cmd and isinstance(cmd, dict)]
             
         except Exception as e:
             _LOGGER.error(f"Failed to get recent commands: {str(e)}")
@@ -218,20 +365,33 @@ class CommandStorage(StorageBase):
             
             # Get all command keys
             pattern = self._key("cmd_*")
-            cmd_keys = await self.redis.keys(pattern)
+            keys_str = await self._valkey_cmd("KEYS", pattern)
+            cmd_keys = keys_str.split("\n") if keys_str else []
             
-            # Delete old commands
+            # Delete old commands in batches
             deleted = 0
+            batch_size = 100
+            del_keys = []
+            
             for key in cmd_keys:
                 try:
                     # Extract timestamp from key
                     ts = float(key.split("_")[-1])
                     if ts < cutoff_ts:
-                        await self.redis.delete(key)
-                        deleted += 1
+                        del_keys.append(key)
+                        if len(del_keys) >= batch_size:
+                            # Delete batch
+                            await self._valkey_cmd("DEL", *del_keys)
+                            deleted += len(del_keys)
+                            del_keys = []
                 except ValueError:
                     continue
                     
+            # Delete remaining keys
+            if del_keys:
+                await self._valkey_cmd("DEL", *del_keys)
+                deleted += len(del_keys)
+                
             return deleted
             
         except Exception as e:

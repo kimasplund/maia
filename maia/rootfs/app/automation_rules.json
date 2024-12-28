@@ -1,0 +1,241 @@
+{
+  "rules": [
+    {
+      "id": "welcome_home",
+      "name": "Welcome Home",
+      "description": "Welcome people when they arrive home",
+      "trigger": {
+        "source": "face_recognition",
+        "event_type": "face_recognized",
+        "data": {
+          "confidence": 0.8
+        }
+      },
+      "conditions": [
+        {
+          "type": "time_condition",
+          "start_time": "06:00:00",
+          "end_time": "23:00:00"
+        }
+      ],
+      "actions": [
+        {
+          "type": "notification",
+          "message": "Welcome home, {face.name}!",
+          "target": "voice"
+        },
+        {
+          "type": "scene_activation",
+          "scene_id": "welcome_home",
+          "transition": 2
+        }
+      ],
+      "enabled": true,
+      "metadata": {
+        "created_at": "2024-01-01T00:00:00Z",
+        "last_modified": "2024-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "presence_lighting",
+      "name": "Presence-based Lighting",
+      "description": "Control lights based on presence detection",
+      "trigger": {
+        "source": "ble_tracking",
+        "event_type": "device_position_updated"
+      },
+      "conditions": [
+        {
+          "type": "presence_condition",
+          "presence": true,
+          "person": "{device.owner}"
+        }
+      ],
+      "actions": [
+        {
+          "type": "device_control",
+          "device_id": "light.living_room",
+          "command": "turn_on",
+          "parameters": {
+            "brightness": 255,
+            "transition": 1
+          }
+        }
+      ],
+      "enabled": true,
+      "metadata": {
+        "created_at": "2024-01-01T00:00:00Z",
+        "last_modified": "2024-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "voice_scene_control",
+      "name": "Voice Scene Control",
+      "description": "Activate scenes via voice commands",
+      "trigger": {
+        "source": "voice_command",
+        "event_type": "voice_command",
+        "data": {
+          "intent": "activate_scene"
+        }
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "scene_activation",
+          "scene_id": "{command.slots.scene_name}",
+          "transition": 1
+        },
+        {
+          "type": "notification",
+          "message": "Activated {command.slots.scene_name} scene",
+          "target": "voice"
+        }
+      ],
+      "enabled": true,
+      "metadata": {
+        "created_at": "2024-01-01T00:00:00Z",
+        "last_modified": "2024-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "morning_routine",
+      "name": "Morning Routine",
+      "description": "Start morning routine when first person is detected",
+      "trigger": {
+        "source": "face_recognition",
+        "event_type": "face_recognized"
+      },
+      "conditions": [
+        {
+          "type": "time_condition",
+          "start_time": "05:00:00",
+          "end_time": "09:00:00"
+        }
+      ],
+      "actions": [
+        {
+          "type": "scene_activation",
+          "scene_id": "morning_routine",
+          "transition": 5
+        },
+        {
+          "type": "notification",
+          "message": "Good morning! Starting your morning routine.",
+          "target": "voice"
+        },
+        {
+          "type": "device_control",
+          "device_id": "media_player.kitchen",
+          "command": "play_media",
+          "parameters": {
+            "media_content_id": "morning_playlist",
+            "media_content_type": "playlist"
+          }
+        }
+      ],
+      "enabled": true,
+      "metadata": {
+        "created_at": "2024-01-01T00:00:00Z",
+        "last_modified": "2024-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "security_alert",
+      "name": "Security Alert",
+      "description": "Send alert when unknown face is detected during night hours",
+      "trigger": {
+        "source": "face_recognition",
+        "event_type": "face_recognized",
+        "data": {
+          "name": "unknown"
+        }
+      },
+      "conditions": [
+        {
+          "type": "time_condition",
+          "start_time": "22:00:00",
+          "end_time": "06:00:00"
+        }
+      ],
+      "actions": [
+        {
+          "type": "notification",
+          "message": "Unknown person detected! Check security cameras.",
+          "target": "all"
+        },
+        {
+          "type": "device_control",
+          "device_id": "camera.front_door",
+          "command": "record",
+          "parameters": {
+            "duration": 30
+          }
+        },
+        {
+          "type": "scene_activation",
+          "scene_id": "security_alert",
+          "transition": 0
+        }
+      ],
+      "enabled": true,
+      "metadata": {
+        "created_at": "2024-01-01T00:00:00Z",
+        "last_modified": "2024-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "device_tracking",
+      "name": "Device Tracking",
+      "description": "Track device movements and update presence",
+      "trigger": {
+        "source": "ble_tracking",
+        "event_type": "device_detected"
+      },
+      "conditions": [
+        {
+          "type": "device_condition",
+          "device_id": "{device.id}",
+          "state": "registered"
+        }
+      ],
+      "actions": [
+        {
+          "type": "device_control",
+          "device_id": "input_boolean.presence_{device.owner}",
+          "command": "turn_on"
+        }
+      ],
+      "enabled": true,
+      "metadata": {
+        "created_at": "2024-01-01T00:00:00Z",
+        "last_modified": "2024-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "voice_assistant",
+      "name": "Voice Assistant",
+      "description": "Handle general voice commands",
+      "trigger": {
+        "source": "voice_command",
+        "event_type": "voice_command",
+        "data": {
+          "intent": "general_query"
+        }
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "notification",
+          "message": "{command.response}",
+          "target": "voice"
+        }
+      ],
+      "enabled": true,
+      "metadata": {
+        "created_at": "2024-01-01T00:00:00Z",
+        "last_modified": "2024-01-01T00:00:00Z"
+      }
+    }
+  ]
+} 

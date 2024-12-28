@@ -1,0 +1,34 @@
+{
+    "wifi_ssid": "your_wifi_ssid",
+    "wifi_password": "your_wifi_password",
+    "mqtt_server": "your_mqtt_server",
+    "mqtt_user": "your_mqtt_user",
+    "mqtt_password": "your_mqtt_password",
+    "location": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+    },
+    "scan_time": 5,
+    "scan_interval": 100,
+    "scan_window": 99,
+    "device_name": "BLE Scanner",
+    "scan_settings": {
+        "active_scan": true,
+        "filter_duplicates": true,
+        "min_rssi": -90
+    },
+    "power_settings": {
+        "light_sleep": true,
+        "wifi_power_save": true,
+        "ble_power": "high"
+    },
+    "advanced": {
+        "mqtt_keepalive": 60,
+        "mqtt_qos": 1,
+        "mqtt_retain": false,
+        "wifi_retry_limit": 20,
+        "wifi_retry_delay": 500,
+        "status_interval": 10000
+    }
+} 

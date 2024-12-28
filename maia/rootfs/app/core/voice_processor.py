@@ -1,191 +1,258 @@
 """
-Voice processing module for MAIA.
-Handles voice commands, speech recognition, and TTS.
+Voice processing system for MAIA.
 """
 import asyncio
 import logging
+import numpy as np
+from typing import Dict, List, Optional, Any, Callable
 import speech_recognition as sr
 import pyttsx3
-from typing import Dict, List, Optional, Any, Deque
-from collections import deque
-from datetime import datetime, timedelta
-from cachetools import TTLCache
-from threadpoolctl import threadpool_limits, ThreadpoolController
-from ..utils.audio_utils import AudioPreprocessor
+from transformers import pipeline
 from ..database.storage import CommandStorage
-
-_LOGGER = logging.getLogger(__name__)
-
-class VoiceProcessorConfig:
-    def __init__(self, config: Dict[str, Any]):
-        self.recognition_engine = config.get('recognition_engine', 'sphinx')
-        self.language = config.get('language', 'en-US')
-        self.enable_noise_reduction = config.get('enable_noise_reduction', True)
-        self.command_timeout = config.get('command_timeout', 30)  # seconds
-        self.max_retries = config.get('max_retries', 3)
-        self.cache_ttl = config.get('cache_ttl', 300)  # 5 minutes
-        self.max_cache_size = config.get('max_cache_size', 1000)
-        self.command_history_size = config.get('command_history_size', 100)
-        self.enable_command_learning = config.get('enable_command_learning', True)
-        self.confidence_threshold = config.get('confidence_threshold', 0.6)
-        self.use_wake_word = config.get('use_wake_word', True)
-        self.wake_words = config.get('wake_words', ['hey maia', 'maia'])
+from ..core.openai_integration import OpenAIIntegration
+import aiohttp
 
 class VoiceProcessor:
-    def __init__(self, config: Dict[str, Any]):
+    """Voice processing system for speech recognition and synthesis."""
+    
+    def __init__(
+        self,
+        command_storage: CommandStorage,
+        openai_integration: OpenAIIntegration,
+        language: str = "en-US",
+        confidence_threshold: float = 0.6
+    ):
         """Initialize voice processor."""
-        self.config = VoiceProcessorConfig(config)
-        self.audio_preprocessor = AudioPreprocessor()
-        self.command_storage = CommandStorage()
+        self.command_storage = command_storage
+        self.openai_integration = openai_integration
+        self.language = language
+        self.confidence_threshold = confidence_threshold
+        self.logger = logging.getLogger(__name__)
         
-        # Initialize thread pool controller
-        self.threadpool_controller = ThreadpoolController()
-        self.thread_limits = {
-            "openmp": 2,  # Limit OpenMP threads for audio processing
-            "blas": 1,    # Limit BLAS threads
-        }
-        
-        # Apply thread limits
-        for prefix, limit in self.thread_limits.items():
-            self.threadpool_controller.limit(limits={prefix: limit})
-            _LOGGER.info(f"Applied {prefix} thread limit: {limit}")
-        
-        # Initialize speech recognition
+        # Initialize speech recognizer
         self.recognizer = sr.Recognizer()
-        if self.config.enable_noise_reduction:
-            self.recognizer.dynamic_energy_threshold = True
-            self.recognizer.energy_threshold = 4000
-            
-        # Initialize TTS engine
+        self.recognizer.dynamic_energy_threshold = True
+        self.recognizer.energy_threshold = 4000
+        
+        # Initialize text-to-speech engine
         self.tts_engine = pyttsx3.init()
+        self.tts_engine.setProperty("rate", 150)
         
-        # Command processing state
-        self.command_queue: Deque[Dict[str, Any]] = deque(maxlen=100)
-        self.processing_commands: Dict[str, asyncio.Task] = {}
-        self.command_history: Deque[Dict[str, Any]] = deque(
-            maxlen=self.config.command_history_size
-        )
+        # Initialize NLU pipeline
+        self.nlu_pipeline = None
+        self._gpu_url = None
+        self._gpu_session = None
+        self._setup_nlu_pipeline()
         
-        # Caching
-        self.recognition_cache = TTLCache(
-            maxsize=self.config.max_cache_size,
-            ttl=self.config.cache_ttl
-        )
+        # Initialize command handlers
+        self.command_handlers: Dict[str, Callable] = {}
         
-        # Performance metrics
-        self.metrics = {
-            "commands_processed": 0,
-            "successful_commands": 0,
-            "failed_commands": 0,
-            "average_processing_time": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "thread_info": self.threadpool_controller.info()
-        }
-
-    async def process_audio(self, audio_data: bytes) -> Optional[Dict[str, Any]]:
-        """Process audio data and return recognized command."""
+    def _setup_nlu_pipeline(self):
+        """Set up NLU pipeline."""
+        if self._gpu_url:
+            # Use remote GPU pipeline
+            self.nlu_pipeline = None  # Will use companion service
+        else:
+            # Use local CPU pipeline
+            self.nlu_pipeline = pipeline(
+                "text-classification",
+                model="distilbert-base-uncased",
+                device=-1  # CPU
+            )
+        
+    def enable_gpu(self, gpu_url: str):
+        """Enable GPU processing using companion service."""
+        self._gpu_url = gpu_url.rstrip('/')
+        self._gpu_session = aiohttp.ClientSession()
+        self._setup_nlu_pipeline()
+        self.logger.info(f"Enabled GPU processing using companion at {gpu_url}")
+        
+    def disable_gpu(self):
+        """Disable GPU processing."""
+        if self._gpu_session:
+            asyncio.create_task(self._gpu_session.close())
+        self._gpu_url = None
+        self._gpu_session = None
+        self._setup_nlu_pipeline()
+        self.logger.info("Disabled GPU processing")
+        
+    async def process_audio(self, audio_data: bytes) -> Dict[str, Any]:
+        """Process audio data."""
         try:
-            # Apply thread limits for audio processing
-            with threadpool_limits(limits=self.thread_limits):
-                # Preprocess audio
-                processed_audio = await self.audio_preprocessor.preprocess(
-                    audio_data,
-                    enable_noise_reduction=self.config.enable_noise_reduction
-                )
-                
-                # Check cache
-                cache_key = hash(processed_audio.tobytes())
-                if cache_key in self.recognition_cache:
-                    self.metrics["cache_hits"] += 1
-                    return self.recognition_cache[cache_key]
-                    
-                self.metrics["cache_misses"] += 1
-                
-                # Convert to AudioData for recognition
-                audio = sr.AudioData(
-                    processed_audio.tobytes(),
-                    sample_rate=16000,
-                    sample_width=2
-                )
-                
-                # Recognize speech
-                text = await self._recognize_speech(audio)
-                if not text:
-                    return None
-                    
-                # Check for wake word if enabled
-                if self.config.use_wake_word and not any(
-                    wake_word in text.lower() 
-                    for wake_word in self.config.wake_words
-                ):
-                    return None
-                    
-                # Process command
-                command = await self._process_command(text)
-                if command:
-                    self.recognition_cache[cache_key] = command
-                    
-                return command
-                
-        except Exception as e:
-            _LOGGER.error(f"Error processing audio: {str(e)}")
-            return None
+            # Try GPU processing first
+            if self._gpu_url and self._gpu_session:
+                try:
+                    result = await self._process_audio_gpu(audio_data)
+                    if result:
+                        return result
+                except Exception as e:
+                    self.logger.error(f"GPU processing failed, falling back to CPU: {str(e)}")
             
-    async def _recognize_speech(self, audio: sr.AudioData) -> Optional[str]:
-        """Recognize speech from audio data."""
+            # Fall back to CPU processing
+            return await self._process_audio_cpu(audio_data)
+            
+        except Exception as e:
+            self.logger.error(f"Audio processing failed: {str(e)}")
+            return {"error": str(e)}
+            
+    async def _process_audio_gpu(self, audio_data: bytes) -> Optional[Dict[str, Any]]:
+        """Process audio using GPU companion service."""
         try:
-            if self.config.recognition_engine == "google":
-                text = await asyncio.to_thread(
-                    self.recognizer.recognize_google,
-                    audio,
-                    language=self.config.language
-                )
-            elif self.config.recognition_engine == "sphinx":
-                text = await asyncio.to_thread(
-                    self.recognizer.recognize_sphinx,
-                    audio,
-                    language=self.config.language
-                )
-            else:
-                _LOGGER.error(f"Unsupported recognition engine: {self.config.recognition_engine}")
+            # Send to companion service
+            data = aiohttp.FormData()
+            data.add_field('audio', audio_data,
+                          filename='audio.wav',
+                          content_type='audio/wav')
+            data.add_field('language', self.language)
+            
+            async with self._gpu_session.post(
+                f"{self._gpu_url}/process_audio",
+                data=data
+            ) as response:
+                if response.status == 200:
+                    return await response.json()
                 return None
                 
-            return text
-            
-        except sr.UnknownValueError:
-            _LOGGER.debug("Speech not recognized")
-            return None
-        except sr.RequestError as e:
-            _LOGGER.error(f"Recognition error: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"GPU audio processing failed: {str(e)}")
             return None
             
-    async def _process_command(self, text: str) -> Optional[Dict[str, Any]]:
-        """Process recognized text into a command."""
+    async def _process_audio_cpu(self, audio_data: bytes) -> Dict[str, Any]:
+        """Process audio using CPU."""
         try:
-            # Basic command processing
-            command = {
+            # Convert audio data to AudioData
+            audio = sr.AudioData(audio_data, 16000, 2)
+            
+            # Perform speech recognition
+            text = self.recognizer.recognize_google(
+                audio,
+                language=self.language
+            )
+            
+            # Perform NLU if pipeline is available
+            intent = None
+            if self.nlu_pipeline:
+                result = self.nlu_pipeline(text)
+                if result[0]["score"] >= self.confidence_threshold:
+                    intent = result[0]["label"]
+            
+            return {
                 "text": text,
-                "timestamp": datetime.now().isoformat(),
-                "confidence": 0.8,  # Placeholder confidence
-                "processed": False
+                "intent": intent,
+                "confidence": result[0]["score"] if intent else 0.0
             }
             
-            # Store command in history
-            self.command_history.append(command)
-            
-            # Update metrics
-            self.metrics["commands_processed"] += 1
-            
-            return command
-            
+        except sr.UnknownValueError:
+            return {"error": "Speech not recognized"}
+        except sr.RequestError as e:
+            return {"error": f"Recognition service error: {str(e)}"}
         except Exception as e:
-            _LOGGER.error(f"Error processing command: {str(e)}")
-            self.metrics["failed_commands"] += 1
+            return {"error": str(e)}
+        
+    def register_command_handler(
+        self,
+        command: str,
+        handler: Callable[[Dict[str, Any]], None]
+    ) -> None:
+        """Register a handler for a specific command."""
+        self.command_handlers[command] = handler
+        
+    async def synthesize_speech(
+        self,
+        text: str,
+        voice: Optional[str] = None,
+        rate: Optional[int] = None,
+        volume: Optional[float] = None
+    ) -> Optional[np.ndarray]:
+        """Synthesize speech from text."""
+        try:
+            # Configure TTS properties
+            if voice:
+                self.tts_engine.setProperty("voice", voice)
+            if rate:
+                self.tts_engine.setProperty("rate", rate)
+            if volume:
+                self.tts_engine.setProperty("volume", volume)
+                
+            # Create a buffer to store audio data
+            audio_buffer = []
+            
+            def callback(data):
+                audio_buffer.append(data)
+                
+            # Set up callback
+            self.tts_engine.connect("data", callback)
+            
+            # Synthesize speech
+            self.tts_engine.say(text)
+            self.tts_engine.runAndWait()
+            
+            # Convert buffer to numpy array
+            if audio_buffer:
+                audio_data = np.frombuffer(b"".join(audio_buffer), dtype=np.int16)
+                return audio_data
+                
             return None
             
-    def cleanup(self):
-        """Clean up resources."""
-        # Reset thread limits to default
-        self.threadpool_controller.reset()
-        _LOGGER.info("Reset thread limits to default") 
+        except Exception as e:
+            self.logger.error(f"Error synthesizing speech: {str(e)}")
+            return None
+            
+    async def start_listening(
+        self,
+        callback: Callable[[Dict[str, Any]], None],
+        device_index: Optional[int] = None
+    ) -> None:
+        """Start listening for voice commands in background."""
+        try:
+            # Initialize microphone
+            with sr.Microphone(device_index=device_index) as source:
+                self.recognizer.adjust_for_ambient_noise(source)
+                
+                while True:
+                    try:
+                        # Listen for audio
+                        audio = self.recognizer.listen(source)
+                        
+                        # Convert to numpy array
+                        audio_data = np.frombuffer(
+                            audio.get_raw_data(),
+                            dtype=np.int16
+                        )
+                        
+                        # Process audio
+                        result = await self.process_audio(
+                            audio_data,
+                            sample_rate=audio.sample_rate
+                        )
+                        
+                        if result:
+                            # Call callback with result
+                            callback(result)
+                            
+                    except sr.WaitTimeoutError:
+                        continue
+                        
+                    except Exception as e:
+                        self.logger.error(f"Error in listening loop: {str(e)}")
+                        await asyncio.sleep(1)
+                        
+        except Exception as e:
+            self.logger.error(f"Error starting voice listener: {str(e)}")
+            
+    async def get_command_history(
+        self,
+        limit: int = 100,
+        intent: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get command history from storage."""
+        try:
+            commands = await self.command_storage.get_commands(
+                limit=limit,
+                intent=intent
+            )
+            return commands
+            
+        except Exception as e:
+            self.logger.error(f"Error getting command history: {str(e)}")
+            return [] 

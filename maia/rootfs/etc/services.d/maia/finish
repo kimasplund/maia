@@ -1,7 +1,17 @@
 #!/usr/bin/execlineb -S0
 
-# Stop Redis server
-redis-cli shutdown
+# Take down the S6 supervision tree when MAIA fails
+if { s6-test ${1} -ne 0 }
+if { s6-test ${1} -ne 256 }
 
-# Take down the S6 supervision tree
+# Clean up any remaining processes
+foreground { bashio::log.warning "MAIA exited with code ${1}" }
+foreground { bashio::log.info "Cleaning up..." }
+
+# Stop any remaining Python processes
+foreground { pkill -f "python3" }
+
+# Clean up any temporary files
+foreground { rm -rf /tmp/* }
+
 s6-svscanctl -t /var/run/s6/services 

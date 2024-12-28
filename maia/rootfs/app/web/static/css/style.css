@@ -1,163 +1,95 @@
-/* Main styles for MAIA web interface */
-
 :root {
     --primary-color: #007bff;
-    --secondary-color: #6c757d;
-    --success-color: #28a745;
-    --danger-color: #dc3545;
-    --warning-color: #ffc107;
+    --secondary-color: #f8f9fa;
+    --error-color: #dc3545;
     --info-color: #17a2b8;
-    --light-color: #f8f9fa;
-    --dark-color: #343a40;
-    --body-bg: #f4f6f9;
-    --navbar-bg: #ffffff;
-    --card-bg: #ffffff;
-    --text-color: #333333;
-    --border-color: #dee2e6;
-}
-
-/* Base styles */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
 }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     line-height: 1.6;
-    color: var(--text-color);
-    background-color: var(--body-bg);
-}
-
-/* Navigation */
-.navbar {
-    background-color: var(--navbar-bg);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    padding: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1000;
-}
-
-.navbar-brand {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: var(--primary-color);
-    text-decoration: none;
-}
-
-.navbar-brand i {
-    margin-right: 0.5rem;
-}
-
-.navbar-menu {
-    display: flex;
-    gap: 1rem;
-}
-
-.navbar-item {
-    color: var(--text-color);
-    text-decoration: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: background-color 0.3s;
-}
-
-.navbar-item:hover,
-.navbar-item.active {
-    background-color: var(--light-color);
-    color: var(--primary-color);
-}
-
-.navbar-item i {
-    font-size: 1.2rem;
-}
-
-/* Main content */
-.main-content {
-    margin-top: 4rem;
-    padding: 2rem;
-    min-height: calc(100vh - 8rem);
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
 }
 
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 1rem;
-}
-
-/* Hero section */
-.hero {
-    text-align: center;
-    padding: 3rem 0;
-    margin-bottom: 3rem;
-}
-
-.hero h1 {
-    font-size: 3rem;
-    color: var(--primary-color);
-    margin-bottom: 1rem;
-}
-
-.hero p {
-    font-size: 1.5rem;
-    color: var(--secondary-color);
-}
-
-/* Feature cards */
-.features {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 2rem;
-    margin-bottom: 3rem;
-}
-
-.feature-card {
-    background-color: var(--card-bg);
-    border-radius: 8px;
     padding: 2rem;
-    text-align: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s;
 }
 
-.feature-card:hover {
-    transform: translateY(-5px);
-}
-
-.feature-card i {
-    font-size: 3rem;
+h1 {
     color: var(--primary-color);
+    text-align: center;
     margin-bottom: 1rem;
 }
 
-.feature-card h2 {
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
+p {
+    text-align: center;
+    color: #666;
 }
 
-.feature-card p {
-    color: var(--secondary-color);
+/* Login form styles */
+.login-form {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 2rem;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.info-text {
+    color: var(--info-color);
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.ha-url {
+    background-color: var(--secondary-color);
+    padding: 0.5rem;
+    border-radius: 4px;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.form-group {
     margin-bottom: 1.5rem;
 }
 
-/* Buttons */
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.help-text {
+    display: block;
+    margin-top: 0.5rem;
+    color: #666;
+    font-size: 0.8rem;
+}
+
 .button {
-    display: inline-block;
-    padding: 0.75rem 1.5rem;
+    display: block;
+    width: 100%;
+    padding: 0.75rem;
     background-color: var(--primary-color);
     color: white;
-    text-decoration: none;
+    border: none;
     border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
     transition: background-color 0.3s;
 }
 
@@ -165,113 +97,9 @@ body {
     background-color: #0056b3;
 }
 
-/* Status panel */
-.status-panel {
-    background-color: var(--card-bg);
-    border-radius: 8px;
-    padding: 2rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.status-panel h2 {
-    margin-bottom: 1.5rem;
+.error-message {
+    color: var(--error-color);
     text-align: center;
-}
-
-.status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1.5rem;
-}
-
-.status-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 1rem;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-}
-
-.status-item i {
-    font-size: 2rem;
-    margin-bottom: 0.5rem;
-    color: var(--primary-color);
-}
-
-.status-label {
-    font-weight: bold;
-    margin-bottom: 0.5rem;
-}
-
-.status-value {
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
+    margin-top: 1rem;
     font-size: 0.875rem;
-}
-
-.status-online {
-    background-color: var(--success-color);
-    color: white;
-}
-
-.status-offline {
-    background-color: var(--danger-color);
-    color: white;
-}
-
-.status-error {
-    background-color: var(--warning-color);
-    color: var(--dark-color);
-}
-
-/* Footer */
-.footer {
-    background-color: var(--navbar-bg);
-    padding: 1rem;
-    text-align: center;
-    box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.footer-content {
-    color: var(--secondary-color);
-    font-size: 0.875rem;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-    .navbar {
-        flex-direction: column;
-        padding: 0.5rem;
-    }
-
-    .navbar-menu {
-        flex-direction: column;
-        width: 100%;
-        margin-top: 1rem;
-    }
-
-    .navbar-item {
-        width: 100%;
-        text-align: center;
-        justify-content: center;
-    }
-
-    .main-content {
-        margin-top: 8rem;
-        padding: 1rem;
-    }
-
-    .hero h1 {
-        font-size: 2rem;
-    }
-
-    .hero p {
-        font-size: 1.2rem;
-    }
-
-    .feature-card {
-        padding: 1.5rem;
-    }
 } 

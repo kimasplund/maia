@@ -15,6 +15,8 @@ from threadpoolctl import threadpool_limits, ThreadpoolController
 from ..utils.image_utils import ImagePreprocessor
 from ..database.storage import FaceStorage
 from concurrent.futures import ThreadPoolExecutor
+import aiohttp
+import time
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,11 +39,11 @@ class FaceRecognitionConfig(Dict):
     max_batch_size: int = 32
 
 class CameraProcessor:
-    """Handles camera streams and face recognition."""
-
+    """Camera processor for MAIA."""
+    
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """Initialize camera processor."""
-        self.config = FaceRecognitionConfig(**(config or {}))
+        self.config = config or {}
         self.image_preprocessor = ImagePreprocessor()
         self.face_storage = FaceStorage()
         
@@ -58,25 +60,19 @@ class CameraProcessor:
             _LOGGER.info(f"Applied {prefix} thread limit: {limit}")
         
         # Initialize face recognition settings
-        if self.config["use_gpu"]:
-            if cv2.cuda.getCudaEnabledDeviceCount() > 0:
-                self.model_type = "cnn"  # CNN model for GPU
-                _LOGGER.info("GPU acceleration enabled for face recognition")
-            else:
-                self.model_type = "hog"  # Fall back to HOG
-                _LOGGER.warning("GPU not available, falling back to CPU processing")
-        else:
-            self.model_type = "hog"  # HOG model for CPU
-            
+        self.model_type = "hog"  # Default to CPU
+        self._gpu_url = None
+        self._gpu_session = None
+        
         # Initialize caches
         self.encoding_cache = TTLCache(
-            maxsize=self.config["max_cache_size"],
-            ttl=self.config["cache_ttl"]
+            maxsize=self.config.get("max_cache_size", 1000),
+            ttl=self.config.get("cache_ttl", 3600)
         )
-        self.recognition_cache = LRUCache(maxsize=self.config["max_cache_size"])
+        self.recognition_cache = LRUCache(maxsize=self.config.get("max_cache_size", 1000))
         self.landmark_cache = TTLCache(
-            maxsize=self.config["max_cache_size"],
-            ttl=self.config["cache_ttl"]
+            maxsize=self.config.get("max_cache_size", 1000),
+            ttl=self.config.get("cache_ttl", 3600)
         )
         
         # Performance metrics
@@ -93,22 +89,80 @@ class CameraProcessor:
         # Initialize thread pool for batch processing with controlled limits
         self.executor = ThreadPoolExecutor(
             max_workers=min(
-                self.config["num_workers"],
+                self.config.get("num_workers", 4),
                 self.thread_limits["openmp"] * 2
             )
         )
         
         # Apply thread limits
         self._apply_thread_limits()
-
-    def _apply_thread_limits(self):
-        """Apply thread limits to various libraries."""
-        for prefix, limit in self.thread_limits.items():
-            self.threadpool_controller.limit(limits={prefix: limit})
-            _LOGGER.info(f"Applied {prefix} thread limit: {limit}")
-
+        
+    def enable_gpu(self, gpu_url: str):
+        """Enable GPU processing using companion service."""
+        self._gpu_url = gpu_url.rstrip('/')
+        self._gpu_session = aiohttp.ClientSession()
+        self.model_type = "cnn"
+        _LOGGER.info(f"Enabled GPU processing using companion at {gpu_url}")
+        
+    def disable_gpu(self):
+        """Disable GPU processing."""
+        if self._gpu_session:
+            asyncio.create_task(self._gpu_session.close())
+        self._gpu_url = None
+        self._gpu_session = None
+        self.model_type = "hog"
+        _LOGGER.info("Disabled GPU processing")
+        
     async def process_frame(self, frame: np.ndarray) -> Dict[str, Any]:
-        """Process a video frame for face detection and recognition."""
+        """Process video frame."""
+        try:
+            start_time = time.time()
+            
+            # Preprocess frame
+            processed_frame = self.image_preprocessor.preprocess(frame)
+            
+            # Try GPU processing first
+            if self._gpu_url and self._gpu_session:
+                try:
+                    result = await self._process_frame_gpu(processed_frame)
+                    if result:
+                        return result
+                except Exception as e:
+                    _LOGGER.error(f"GPU processing failed, falling back to CPU: {str(e)}")
+            
+            # Fall back to CPU processing
+            return await self._process_frame_cpu(processed_frame)
+            
+        except Exception as e:
+            _LOGGER.error(f"Frame processing failed: {str(e)}")
+            return {"error": str(e)}
+            
+    async def _process_frame_gpu(self, frame: np.ndarray) -> Optional[Dict[str, Any]]:
+        """Process frame using GPU companion service."""
+        try:
+            # Encode frame as JPEG
+            _, buffer = cv2.imencode('.jpg', frame)
+            
+            # Send to companion service
+            data = aiohttp.FormData()
+            data.add_field('frame', buffer.tobytes(), 
+                          filename='frame.jpg',
+                          content_type='image/jpeg')
+            
+            async with self._gpu_session.post(
+                f"{self._gpu_url}/process_frame",
+                data=data
+            ) as response:
+                if response.status == 200:
+                    return await response.json()
+                return None
+                
+        except Exception as e:
+            _LOGGER.error(f"GPU frame processing failed: {str(e)}")
+            return None
+            
+    async def _process_frame_cpu(self, frame: np.ndarray) -> Dict[str, Any]:
+        """Process frame using CPU."""
         try:
             # Apply thread limits for image processing
             with threadpool_limits(limits=self.thread_limits):

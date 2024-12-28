@@ -1,15 +1,37 @@
 #!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Home Assistant Add-on: MAIA
+# Runs MAIA
+# ==============================================================================
 
-# Start Redis server
-redis-server --daemonize yes
+# Set environment variables
+export PYTHONPATH=/app
+export CONFIG_PATH=/config/maia.yaml
+export DATA_DIR=/data
 
-# Wait for Redis to be ready
-bashio::log.info "Waiting for Redis to start..."
-while ! redis-cli ping > /dev/null 2>&1; do
-    sleep 1
-done
-bashio::log.info "Redis is ready"
+# Wait for required services
+bashio::log.info "Waiting for required services..."
+
+# Wait for MQTT broker
+if bashio::config.exists 'mqtt.broker'; then
+    MQTT_HOST=$(bashio::config 'mqtt.broker')
+    MQTT_PORT=$(bashio::config 'mqtt.port')
+    bashio::net.wait_for "${MQTT_HOST}" "${MQTT_PORT}"
+fi
+
+# Wait for database if using PostgreSQL
+if bashio::config.equals 'database.type' 'postgresql'; then
+    DB_HOST=$(bashio::config 'database.host')
+    DB_PORT=$(bashio::config 'database.port')
+    bashio::net.wait_for "${DB_HOST}" "${DB_PORT}"
+fi
 
 # Start MAIA
-cd /app
-exec python3 -m api.main 
+bashio::log.info "Starting MAIA..."
+cd /app || bashio::exit.nok "Could not change to app directory"
+
+exec python3 -m uvicorn api.main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 1 \
+    --log-level info 

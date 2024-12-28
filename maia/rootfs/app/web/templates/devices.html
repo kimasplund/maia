@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header with Add Stream Button -->
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-2xl font-bold">Devices & Streams</h1>
+        <button onclick="showAddStreamModal()" 
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Add External Stream
+        </button>
+    </div>
+
+    <!-- Device List -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for device in devices %}
+        <div class="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold">{{ device.name }}</h3>
+                    <p class="text-sm text-gray-600">{{ device.type | title }}</p>
+                </div>
+                <span class="px-2 py-1 text-sm rounded-full {% if device.status == 'online' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                    {{ device.status }}
+                </span>
+            </div>
+            
+            <div class="space-y-2 text-sm text-gray-600">
+                <p><span class="font-medium">Room:</span> {{ device.room or 'Not assigned' }}</p>
+                <p><span class="font-medium">Last seen:</span> {{ device.last_seen | format_datetime }}</p>
+                {% if device.type != 'external' %}
+                <p><span class="font-medium">Scan interval:</span> {{ device.scan_interval }}s</p>
+                {% endif %}
+                {% if device.stream_url %}
+                <p><span class="font-medium">Stream URL:</span> 
+                    <a href="{{ device.stream_url }}" target="_blank" class="text-blue-600 hover:text-blue-800">
+                        View Stream
+                    </a>
+                </p>
+                {% endif %}
+            </div>
+            
+            <div class="mt-4 flex flex-wrap gap-2">
+                {% for capability in device.capabilities %}
+                <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                    {{ capability | replace('_', ' ') | title }}
+                </span>
+                {% endfor %}
+            </div>
+            
+            <div class="mt-6 flex justify-between items-center">
+                <button onclick="showDeviceDetails('{{ device.id }}')" 
+                        class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                    View Details
+                </button>
+                <button onclick="showDeviceConfig('{{ device.id }}')"
+                        class="text-gray-600 hover:text-gray-800">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Device Details Modal -->
+    <div id="deviceDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium" id="deviceDetailsTitle"></h3>
+                <div class="mt-4 space-y-6" id="deviceDetailsContent">
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- Basic Info -->
+                        <div class="col-span-2 md:col-span-1">
+                            <h4 class="font-medium mb-2">Device Information</h4>
+                            <div class="space-y-2 text-sm" id="deviceBasicInfo"></div>
+                        </div>
+                        
+                        <!-- Latest Data -->
+                        <div class="col-span-2 md:col-span-1">
+                            <h4 class="font-medium mb-2">Latest Data</h4>
+                            <div class="space-y-2 text-sm" id="deviceLatestData"></div>
+                        </div>
+                        
+                        <!-- Stream Info (if available) -->
+                        <div id="streamInfoSection" class="col-span-2 hidden">
+                            <h4 class="font-medium mb-2">Stream Information</h4>
+                            <div class="space-y-2 text-sm" id="streamInfo"></div>
+                        </div>
+                        
+                        <!-- Firmware -->
+                        <div class="col-span-2">
+                            <h4 class="font-medium mb-2">Firmware</h4>
+                            <div class="flex items-center justify-between">
+                                <span id="firmwareVersion"></span>
+                                <button onclick="updateFirmware()" 
+                                        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                                    Check for Updates
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeDeviceDetails()" 
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Config Modal -->
+    <div id="deviceConfigModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium">Configure Device</h3>
+                <form id="deviceConfigForm" class="mt-4 space-y-4">
+                    <input type="hidden" id="configDeviceId">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Name</label>
+                        <input type="text" id="configName" 
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Room</label>
+                        <input type="text" id="configRoom" 
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div id="scanIntervalField">
+                        <label class="block text-sm font-medium text-gray-700">Scan Interval (seconds)</label>
+                        <input type="number" id="configInterval" min="5" 
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                </form>
+            </div>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button onclick="closeDeviceConfig()" 
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">
+                    Cancel
+                </button>
+                <button onclick="saveDeviceConfig()" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Stream Modal -->
+    <div id="addStreamModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium">Add External Stream</h3>
+                <form id="addStreamForm" class="mt-4 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Name</label>
+                        <input type="text" id="streamName" required
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Stream URL</label>
+                        <input type="url" id="streamUrl" required
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Type</label>
+                        <select id="streamType" required
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            <option value="video">Video</option>
+                            <option value="audio">Audio</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Authentication</label>
+                        <select id="streamAuthType" onchange="toggleAuthFields()"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            <option value="none">None</option>
+                            <option value="basic">Basic Auth</option>
+                            <option value="token">Bearer Token</option>
+                        </select>
+                    </div>
+                    <div id="basicAuthFields" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Username</label>
+                            <input type="text" id="streamUsername"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Password</label>
+                            <input type="password" id="streamPassword"
+                                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                        </div>
+                    </div>
+                    <div id="tokenAuthField" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700">Bearer Token</label>
+                        <input type="text" id="streamToken"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                    </div>
+                </form>
+            </div>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button onclick="closeAddStream()" 
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">
+                    Cancel
+                </button>
+                <button onclick="saveStream()" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    Add Stream
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function showDeviceDetails(deviceId) {
+    const response = await fetch(`/api/devices/${deviceId}`);
+    const device = await response.json();
+    
+    document.getElementById('deviceDetailsTitle').textContent = device.name;
+    
+    // Basic Info
+    const basicInfo = document.getElementById('deviceBasicInfo');
+    basicInfo.innerHTML = `
+        <p><span class="font-medium">ID:</span> ${device.id}</p>
+        <p><span class="font-medium">Type:</span> ${device.type}</p>
+        <p><span class="font-medium">Room:</span> ${device.room || 'Not assigned'}</p>
+        <p><span class="font-medium">IP Address:</span> ${device.ip_address}</p>
+        <p><span class="font-medium">Last Seen:</span> ${formatDateTime(device.last_seen)}</p>
+        <p><span class="font-medium">Status:</span> ${device.status}</p>
+    `;
+    
+    // Latest Data
+    const latestData = document.getElementById('deviceLatestData');
+    latestData.innerHTML = Object.entries(device.data)
+        .map(([key, value]) => `<p><span class="font-medium">${key}:</span> ${JSON.stringify(value)}</p>`)
+        .join('');
+    
+    // Stream Info
+    const streamSection = document.getElementById('streamInfoSection');
+    const streamInfo = document.getElementById('streamInfo');
+    if (device.stream_url) {
+        streamSection.classList.remove('hidden');
+        streamInfo.innerHTML = `
+            <p><span class="font-medium">Stream URL:</span> 
+                <a href="${device.stream_url}" target="_blank" class="text-blue-600 hover:text-blue-800">
+                    ${device.stream_url}
+                </a>
+            </p>
+            ${device.stream_config ? `
+                <p><span class="font-medium">Auth Type:</span> ${device.stream_config.auth_type}</p>
+            ` : ''}
+        `;
+    } else {
+        streamSection.classList.add('hidden');
+    }
+    
+    // Firmware
+    document.getElementById('firmwareVersion').textContent = 
+        `Current version: ${device.firmware_version}`;
+    
+    document.getElementById('deviceDetailsModal').classList.remove('hidden');
+}
+
+function showAddStreamModal() {
+    document.getElementById('addStreamModal').classList.remove('hidden');
+}
+
+function closeAddStream() {
+    document.getElementById('addStreamModal').classList.add('hidden');
+    document.getElementById('addStreamForm').reset();
+}
+
+function toggleAuthFields() {
+    const authType = document.getElementById('streamAuthType').value;
+    const basicAuthFields = document.getElementById('basicAuthFields');
+    const tokenAuthField = document.getElementById('tokenAuthField');
+    
+    basicAuthFields.classList.add('hidden');
+    tokenAuthField.classList.add('hidden');
+    
+    if (authType === 'basic') {
+        basicAuthFields.classList.remove('hidden');
+    } else if (authType === 'token') {
+        tokenAuthField.classList.remove('hidden');
+    }
+}
+
+async function saveStream() {
+    const streamInfo = {
+        name: document.getElementById('streamName').value,
+        url: document.getElementById('streamUrl').value,
+        type: document.getElementById('streamType').value,
+        auth_type: document.getElementById('streamAuthType').value
+    };
+    
+    if (streamInfo.auth_type === 'basic') {
+        streamInfo.auth_data = {
+            username: document.getElementById('streamUsername').value,
+            password: document.getElementById('streamPassword').value
+        };
+    } else if (streamInfo.auth_type === 'token') {
+        streamInfo.auth_data = {
+            token: document.getElementById('streamToken').value
+        };
+    }
+    
+    await fetch('/api/streams', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(streamInfo)
+    });
+    
+    closeAddStream();
+    location.reload();
+}
+
+async function showDeviceConfig(deviceId) {
+    const response = await fetch(`/api/devices/${deviceId}`);
+    const device = await response.json();
+    
+    document.getElementById('configDeviceId').value = device.id;
+    document.getElementById('configName').value = device.name;
+    document.getElementById('configRoom').value = device.room || '';
+    document.getElementById('configInterval').value = device.scan_interval;
+    
+    document.getElementById('deviceConfigModal').classList.remove('hidden');
+}
+
+function closeDeviceConfig() {
+    document.getElementById('deviceConfigModal').classList.add('hidden');
+}
+
+async function saveDeviceConfig() {
+    const deviceId = document.getElementById('configDeviceId').value;
+    const config = {
+        name: document.getElementById('configName').value,
+        room: document.getElementById('configRoom').value,
+        scan_interval: parseInt(document.getElementById('configInterval').value)
+    };
+    
+    await fetch(`/api/devices/${deviceId}/config`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(config)
+    });
+    
+    closeDeviceConfig();
+    location.reload();
+}
+
+async function updateFirmware() {
+    const deviceId = document.getElementById('configDeviceId').value;
+    await fetch(`/api/devices/${deviceId}/update`, {
+        method: 'POST'
+    });
+    // Show update status notification
+}
+
+function formatDateTime(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleString();
+}
+</script>
+{% endblock %} 

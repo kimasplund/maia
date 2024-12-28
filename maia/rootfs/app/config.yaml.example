@@ -1,0 +1,57 @@
+# MAIA Configuration Example
+---
+mqtt:
+  broker: core-mosquitto
+  port: 1883
+  username: ""
+  password: ""
+  topic_prefix: maia
+
+database:
+  type: sqlite  # or postgresql
+  path: /data/maia.db  # for sqlite
+  # For PostgreSQL:
+  # host: localhost
+  # port: 5432
+  # name: maia
+  # user: maia
+  # password: ""
+
+camera:
+  model_type: hog  # or cnn
+  tolerance: 0.6
+  batch_processing: true
+  max_batch_size: 32
+  thread_limits:
+    openmp: 4
+    blas: 2
+
+voice:
+  recognition_engine: google  # or sphinx, vosk
+  language: en-US
+  enable_noise_reduction: true
+  thread_limits:
+    openmp: 2
+    blas: 1
+
+websocket:
+  host: 0.0.0.0
+  port: 8000
+
+ble_tracking:
+  enabled: true
+  scan_interval: 5
+  min_rssi: -90
+  position_update_interval: 1
+
+logging:
+  level: info
+  file: /data/maia.log
+  max_size: 10MB
+  backup_count: 3
+
+advanced:
+  init_db: true
+  debug_mode: false
+  cache_dir: /data/cache
+  models_dir: /app/models 
